@@ -1,0 +1,30 @@
+# Oh My Music Bank - Caddy 配置
+# 反代 API 到 Go 后端（Unix socket），并托管前端 SPA 静态文件。
+
+:80 {
+	encode gzip
+
+	# API 与健康检查走 Unix socket 直连后端（零网络开销）。
+	handle /api/* {
+		reverse_proxy unix//var/run/ommb/server.sock
+	}
+	handle /health {
+		reverse_proxy unix//var/run/ommb/server.sock
+	}
+
+	# 前端静态文件 + SPA history 回退。
+	handle {
+		root * /usr/share/caddy
+
+		# Vite 产物带 hash，可长期缓存。
+		@hashedAssets path /assets/*
+		header @hashedAssets Cache-Control "public, max-age=31536000, immutable"
+
+		# 入口 HTML 每次校验更新。
+		@html path /index.html
+		header @html Cache-Control "no-cache"
+
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,0 +1,95 @@
+name: Build and Publish
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  backend-check:
+    name: Backend build & vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - run: go build ./...
+      - run: go vet ./...
+
+  frontend-check:
+    name: Frontend typecheck & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install
+      - run: pnpm typecheck
+      - run: pnpm build
+
+  build:
+    name: Build image (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    needs: [backend-check, frontend-check]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: external-db
+            is_primary: true
+          - variant: all-in-one
+            is_primary: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ matrix.variant }}
+            type=raw,value=latest,enable=${{ matrix.is_primary && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) }}
+            type=semver,pattern={{version}},enable=${{ matrix.is_primary }}
+            type=sha,prefix=${{ matrix.variant }}-
+          flavor: latest=false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Containerfile
+          target: ${{ matrix.variant }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}

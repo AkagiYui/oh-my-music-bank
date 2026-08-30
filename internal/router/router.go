@@ -1,0 +1,212 @@
+// Package router 组装 HTTP 路由、中间件与处理器。
+package router
+
+import (
+	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+
+	"github.com/akagiyui/oh-my-music-bank/internal/config"
+	"github.com/akagiyui/oh-my-music-bank/internal/handler"
+	"github.com/akagiyui/oh-my-music-bank/internal/middleware"
+	"github.com/akagiyui/oh-my-music-bank/internal/service/bilibili"
+	"github.com/akagiyui/oh-my-music-bank/internal/service/cache"
+	"github.com/akagiyui/oh-my-music-bank/internal/storage/objectstore"
+)
+
+// SetupDeps 路由初始化所需依赖。
+type SetupDeps struct {
+	DB     *gorm.DB
+	Config *config.Config
+	Cache  *cache.Manager
+	Store  *objectstore.Store
+	Bili   *bilibili.Client
+}
+
+// Setup 初始化处理器、中间件并返回 gin 引擎。
+func Setup(deps SetupDeps) *gin.Engine {
+	authHandler := handler.NewAuthHandler(deps.DB, deps.Config.Auth, deps.Cache)
+	apikeyHandler := handler.NewAPIKeyHandler(deps.DB)
+	userHandler := handler.NewUserHandler(deps.DB)
+	siteHandler := handler.NewSiteHandler(deps.DB, deps.Cache)
+	trackHandler := handler.NewTrackHandler(deps.DB, deps.Store)
+	artistHandler := handler.NewArtistHandler(deps.DB, deps.Store)
+	albumHandler := handler.NewAlbumHandler(deps.DB, deps.Store)
+	languageHandler := handler.NewLanguageHandler(deps.DB)
+	audioHandler := handler.NewAudioHandler(deps.DB, deps.Store, deps.Config.Upload)
+	publicHandler := handler.NewPublicHandler(deps.DB, deps.Store)
+	statsHandler := handler.NewStatsHandler(deps.DB)
+	logHandler := handler.NewLogHandler(deps.DB)
+	integrationsHandler := handler.NewIntegrationsHandler(deps.Cache)
+	metadataHandler := handler.NewMetadataHandler(deps.DB, deps.Store)
+	bilibiliHandler := handler.NewBilibiliHandler(deps.DB, deps.Store, deps.Cache, deps.Bili)
+
+	engine := gin.New()
+	engine.Use(gin.Recovery())
+	if deps.Config.Server.Debug {
+		engine.Use(gin.Logger())
+	}
+	engine.MaxMultipartMemory = 32 << 20
+
+	engine.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
+	// 开放接口：API Key 鉴权 + 调用日志。
+	open := engine.Group("/api/open/v1")
+	open.Use(middleware.APIKeyAuthMiddleware(deps.DB))
+	open.Use(middleware.APILogMiddleware(deps.DB))
+	{
+		open.GET("/search", publicHandler.Search)
+		open.GET("/tracks/:id", publicHandler.GetTrack)
+	}
+
+	// 公共接口（无需鉴权）。
+	pub := engine.Group("/api/v1")
+	{
+		pub.GET("/site", siteHandler.PublicConfig)
+		auth := pub.Group("/auth")
+		auth.POST("/register", authHandler.Register)
+		auth.POST("/login", authHandler.Login)
+		auth.POST("/refresh", authHandler.Refresh)
+	}
+
+	// 需登录接口。
+	authd := engine.Group("/api/v1")
+	authd.Use(middleware.WebAuthMiddleware(deps.Config.Auth, deps.DB))
+	{
+		authd.GET("/auth/me", authHandler.Me)
+
+		ak := authd.Group("/api-keys")
+		{
+			ak.GET("", apikeyHandler.List)
+			ak.POST("", apikeyHandler.Create)
+			ak.PUT("/:id", apikeyHandler.Update)
+			ak.POST("/:id/revoke", apikeyHandler.Revoke)
+			ak.DELETE("/:id", apikeyHandler.Delete)
+		}
+
+		profile := authd.Group("/profile")
+		{
+			profile.PUT("/email", userHandler.UpdateProfileEmail)
+			profile.PUT("/password", userHandler.ChangeProfilePassword)
+		}
+
+		// 管理端（需 admin）。
+		admin := authd.Group("/admin")
+		admin.Use(middleware.AdminOnly())
+		{
+			stats := admin.Group("/stats")
+			{
+				stats.GET("/overview", statsHandler.Overview)
+				stats.GET("/timeseries", statsHandler.Timeseries)
+			}
+
+			admin.GET("/logs", logHandler.List)
+
+			users := admin.Group("/users")
+			{
+				users.GET("", userHandler.List)
+				users.PUT("/:id/role", userHandler.UpdateRole)
+				users.PUT("/:id/active", userHandler.ToggleActive)
+				users.DELETE("/:id", userHandler.Delete)
+			}
+
+			adminKeys := admin.Group("/api-keys")
+			{
+				adminKeys.GET("", apikeyHandler.AdminList)
+				adminKeys.PUT("/:id", apikeyHandler.AdminUpdate)
+				adminKeys.DELETE("/:id", apikeyHandler.AdminDelete)
+			}
+
+			tracks := admin.Group("/tracks")
+			{
+				tracks.GET("", trackHandler.List)
+				tracks.GET("/:id", trackHandler.Detail)
+				tracks.PUT("/:id", trackHandler.Update)
+				tracks.DELETE("/:id", trackHandler.Delete)
+				tracks.POST("/:id/aliases", trackHandler.AddAlias)
+				tracks.DELETE("/:id/aliases/:aliasId", trackHandler.DeleteAlias)
+				tracks.PUT("/:id/artists", trackHandler.SetArtists)
+				tracks.PUT("/:id/albums", trackHandler.SetAlbums)
+				tracks.PUT("/:id/languages", trackHandler.SetLanguages)
+				tracks.POST("/:id/enrich", metadataHandler.Enrich)
+			}
+
+			artists := admin.Group("/artists")
+			{
+				artists.GET("", artistHandler.List)
+				artists.POST("", artistHandler.Create)
+				artists.GET("/:id", artistHandler.Detail)
+				artists.PUT("/:id", artistHandler.Update)
+				artists.DELETE("/:id", artistHandler.Delete)
+				artists.POST("/:id/aliases", artistHandler.AddAlias)
+				artists.DELETE("/:id/aliases/:aliasId", artistHandler.DeleteAlias)
+			}
+
+			albums := admin.Group("/albums")
+			{
+				albums.GET("", albumHandler.List)
+				albums.POST("", albumHandler.Create)
+				albums.GET("/:id", albumHandler.Detail)
+				albums.PUT("/:id", albumHandler.Update)
+				albums.DELETE("/:id", albumHandler.Delete)
+				albums.PUT("/:id/artists", albumHandler.SetArtists)
+			}
+
+			languages := admin.Group("/languages")
+			{
+				languages.GET("", languageHandler.List)
+				languages.POST("", languageHandler.Create)
+				languages.DELETE("/:id", languageHandler.Delete)
+			}
+
+			audio := admin.Group("/audio")
+			{
+				audio.POST("/upload", audioHandler.Upload)
+				audio.DELETE("/:id", audioHandler.DeleteAudio)
+			}
+
+			site := admin.Group("/site")
+			{
+				site.GET("/settings", siteHandler.AdminGetSettings)
+				site.PUT("/settings", siteHandler.AdminUpdateSettings)
+			}
+
+			integrations := admin.Group("/integrations")
+			{
+				integrations.GET("", integrationsHandler.Get)
+				integrations.PUT("", integrationsHandler.Update)
+			}
+
+			meta := admin.Group("/metadata")
+			{
+				meta.GET("/search", metadataHandler.Search)
+				meta.GET("/song/:id", metadataHandler.Song)
+			}
+
+			bili := admin.Group("/bilibili")
+			{
+				bili.GET("/status", bilibiliHandler.Status)
+				bili.GET("/favorites", bilibiliHandler.Favorites)
+				bili.GET("/favorites/:mediaId", bilibiliHandler.FavoriteItems)
+				bili.GET("/resolve", bilibiliHandler.Resolve)
+				bili.POST("/ingest", bilibiliHandler.Ingest)
+				bili.POST("/recognize", bilibiliHandler.Recognize)
+			}
+		}
+	}
+
+	// 哔哩哔哩音频代理：媒体元素无法带 Authorization 头，改用 query token 鉴权。
+	engine.GET("/api/v1/admin/bilibili/stream",
+		middleware.MediaTokenAuth(deps.Config.Auth, deps.DB), bilibiliHandler.Stream)
+
+	return engine
+}

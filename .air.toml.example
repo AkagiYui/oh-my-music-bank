@@ -1,0 +1,17 @@
+# air 热重载配置示例（复制为 .air.toml）。
+# 安装：go install github.com/air-verse/air@latest
+# 使用：air
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/server ./cmd/server"
+bin = "./tmp/server"
+include_ext = ["go"]
+exclude_dir = ["tmp", "web", ".git", ".github"]
+delay = 500
+stop_on_error = true
+
+[log]
+time = true

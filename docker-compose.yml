@@ -1,0 +1,32 @@
+# 使用外部数据库与对象存储运行（读取 .env 中的 DB / S3_* / FILE_PREFIX / JWT_SECRET）。
+# 启动：docker compose up -d --build
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: external-db
+    env_file: .env
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+  # 单机一体化（内嵌 PostgreSQL）示例：不设置 DB 即自动启动内嵌库。
+  # all-in-one:
+  #   build:
+  #     context: .
+  #     dockerfile: Containerfile
+  #     target: all-in-one
+  #   environment:
+  #     JWT_SECRET: change-me
+  #     S3_ENDPOINT: https://cn-nb1.rains3.com
+  #     S3_ACCESS_KEY: ""
+  #     S3_SECRET_KEY: ""
+  #     S3_BUCKET: ""
+  #     FILE_PREFIX: ""
+  #   ports:
+  #     - "8080:80"
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+# volumes:
+#   pgdata:

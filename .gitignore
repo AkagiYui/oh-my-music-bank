@@ -1,0 +1,21 @@
+# Go
+/server
+*.test
+*.out
+/tmp/
+
+# 配置与密钥（务必不要提交真实凭据）
+.env
+.env.local
+config.yaml
+
+# 前端
+web/node_modules/
+web/dist/
+web/.vite/
+# 注：web/src/routeTree.gen.ts 由 TanStack Router 插件在 dev/build 时生成，
+# 选择提交它以便 `pnpm typecheck` 与 CI 在全新检出时可直接通过。
+
+# 杂项
+.DS_Store
+*.log
