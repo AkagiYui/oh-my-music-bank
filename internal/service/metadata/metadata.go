@@ -134,7 +134,7 @@ func stripLRC(lrc string) string {
 		return ""
 	}
 	var lines []string
-	for _, line := range strings.Split(lrc, "\n") {
+	for line := range strings.SplitSeq(lrc, "\n") {
 		for {
 			start := strings.IndexByte(line, '[')
 			end := strings.IndexByte(line, ']')

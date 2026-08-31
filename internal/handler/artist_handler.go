@@ -141,8 +141,7 @@ func (h *ArtistHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest(err.Error()))
 		return
 	}
-	artist := model.Artist{Name: req.Name, AvatarKey: req.AvatarKey}
-	artist.ID = idgen.Next()
+	artist := model.Artist{Name: req.Name, AvatarKey: req.AvatarKey, ID: idgen.Next()}
 	if err := h.db.Create(&artist).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to create artist"))
 		return

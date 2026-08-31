@@ -63,10 +63,8 @@ func NewJobs(db *gorm.DB, store *objectstore.Store, bili *BilibiliHandler, maxBy
 func (j *Jobs) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	j.cancel = cancel
-	for i := 0; i < 2; i++ {
-		j.wg.Add(1)
-		go func() {
-			defer j.wg.Done()
+	for range 2 {
+		j.wg.Go(func() {
 			t := time.NewTicker(time.Second)
 			defer t.Stop()
 			for {
@@ -77,11 +75,9 @@ func (j *Jobs) Start() {
 					j.process(ctx)
 				}
 			}
-		}()
+		})
 	}
-	j.wg.Add(1)
-	go func() {
-		defer j.wg.Done()
+	j.wg.Go(func() {
 		t := time.NewTicker(time.Minute)
 		defer t.Stop()
 		for {
@@ -103,7 +99,7 @@ func (j *Jobs) Start() {
 				cancel()
 			}
 		}
-	}()
+	})
 }
 func (j *Jobs) Stop() {
 	if j.cancel != nil {

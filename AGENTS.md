@@ -4,7 +4,7 @@
 
 ## 后端（Go / Gin）
 
-- Go 1.26。修改后端后用 `gofmt -w` 格式化，并用 `go vet ./...` 检查。
+- Go 1.27。修改后端后用 `gofmt -w` 格式化，并用 `go vet ./...` 检查。
 - 构建测试：`go build -o /dev/null ./cmd/server/.`（避免产物落盘）。
 - 数据库结构由 `internal/storage/db/migrations` 下的 goose SQL 迁移维护，
   服务启动时自动执行（`db.Migrate`，带 advisory lock 防并发）。

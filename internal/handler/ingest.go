@@ -120,8 +120,7 @@ func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store,
 	}
 	source := opts.Source
 	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		track := model.Track{Title: title, Duration: meta.Duration, Available: true}
-		track.ID = trackID
+		track := model.Track{Title: title, Duration: meta.Duration, Available: true, ID: trackID}
 		if coverKey != "" {
 			track.CoverKey = &coverKey
 		}
@@ -266,8 +265,7 @@ func upsertArtist(tx *gorm.DB, name string) (*model.Artist, error) {
 	if err := tx.Where("name = ?", name).First(&artist).Error; err == nil {
 		return &artist, nil
 	}
-	artist = model.Artist{Name: name}
-	artist.ID = idgen.Next()
+	artist = model.Artist{Name: name, ID: idgen.Next()}
 	if err := tx.Create(&artist).Error; err != nil {
 		return nil, err
 	}

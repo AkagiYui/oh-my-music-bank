@@ -2,7 +2,7 @@
 
 自定义音源系统：管理员上传音频，系统自动解析信息并写库、上传至对象存储；用户凭 API Key 检索音乐与获取播放地址。
 
-- 后端：Go 1.26 + Gin + GORM + goose（启动时自动迁移）
+- 后端：Go 1.27 + Gin + GORM + goose（启动时自动迁移）
 - 前端：SolidJS + TanStack Router（文件式路由）+ Vite + Tailwind v4 + Kobalte（纯 SPA）
 - 存储：PostgreSQL + S3 兼容对象存储（如雨云 RainS3）
 - 音频解析：`dhowden/tag`（内嵌标签）+ `ffprobe`（技术参数）

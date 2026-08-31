@@ -139,7 +139,7 @@ func TestConcurrentAdministratorBootstrap(t *testing.T) {
 	h := NewAuthHandler(db, cfg, cache.New(db))
 	var wg sync.WaitGroup
 	codes := make(chan int, 2)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -227,16 +227,14 @@ func TestConcurrentDedupAndSharedObjectDeletion(t *testing.T) {
 	var wg sync.WaitGroup
 	tracks := make(chan int64, 2)
 	errs := make(chan error, 2)
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 2 {
+		wg.Go(func() {
 			track, _, e := ingestAudioFile(context.Background(), db, store, p, "wav", ingestOptions{Title: "Test"})
 			errs <- e
 			if e == nil {
 				tracks <- track.ID
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)
@@ -271,11 +269,9 @@ func TestConcurrentDedupAndSharedObjectDeletion(t *testing.T) {
 func TestMetadataAtomicAndSearchAlias(t *testing.T) {
 	db := testDB(t)
 	store, _ := fakeStore(t)
-	track := model.Track{Title: "Original", Available: true}
-	track.ID = 100
+	track := model.Track{Title: "Original", Available: true, ID: 100}
 	must(t, db.Create(&track).Error)
-	artist := model.Artist{Name: "Artist"}
-	artist.ID = 101
+	artist := model.Artist{Name: "Artist", ID: 101}
 	must(t, db.Create(&artist).Error)
 	must(t, db.Create(&model.ArtistAlias{ArtistID: 101, Alias: "别名测试"}).Error)
 	must(t, db.Create(&model.TrackArtist{TrackID: 100, ArtistID: 101}).Error)
@@ -324,8 +320,7 @@ func TestMergePreservesVersionsAndRelationships(t *testing.T) {
 	db := testDB(t)
 	store, _ := fakeStore(t)
 	for _, id := range []int64{201, 202} {
-		track := model.Track{Title: fmt.Sprint(id), Available: true}
-		track.ID = id
+		track := model.Track{Title: fmt.Sprint(id), Available: true, ID: id}
 		must(t, db.Create(&track).Error)
 		must(t, db.Create(&model.Audio{TrackID: id, FileKey: fmt.Sprint(id), QualityLabel: "standard"}).Error)
 	}
@@ -343,8 +338,7 @@ func TestMergePreservesVersionsAndRelationships(t *testing.T) {
 		t.Fatal("source not merged")
 	}
 	for _, id := range []int64{301, 302} {
-		a := model.Artist{Name: fmt.Sprint(id)}
-		a.ID = id
+		a := model.Artist{Name: fmt.Sprint(id), ID: id}
 		must(t, db.Create(&a).Error)
 		must(t, db.Create(&model.TrackArtist{TrackID: 202, ArtistID: id}).Error)
 	}
@@ -392,7 +386,7 @@ func TestRateLimitAndRejectedRequestAudit(t *testing.T) {
 	engine := gin.New()
 	engine.Use(middleware.APILogMiddleware(db), middleware.IPRateLimit(db, "test:", 2))
 	engine.GET("/test", func(c *gin.Context) { c.Status(200) })
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		r := httptest.NewRecorder()
 		engine.ServeHTTP(r, httptest.NewRequest("GET", "/test", nil))
 		want := 200
@@ -418,8 +412,7 @@ func TestMediaTokenScopeAndRevocation(t *testing.T) {
 	must(t, e)
 	claims, e := session.Parse(cfg, access, "access")
 	must(t, e)
-	track := model.Track{Title: "Media", Available: true}
-	track.ID = 400
+	track := model.Track{Title: "Media", Available: true, ID: 400}
 	must(t, db.Create(&track).Error)
 	a := model.Audio{TrackID: 400, FileKey: "media.wav", QualityLabel: "standard"}
 	must(t, db.Create(&a).Error)

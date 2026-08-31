@@ -2,6 +2,7 @@
 package cache
 
 import (
+	"maps"
 	"sync"
 	"time"
 
@@ -103,8 +104,6 @@ func (m *Manager) SetSettings(values map[string]string) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for k, v := range values {
-		m.settings[k] = v
-	}
+	maps.Copy(m.settings, values)
 	return nil
 }

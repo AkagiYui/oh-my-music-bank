@@ -193,13 +193,13 @@ func setDefaults(v *viper.Viper) {
 
 // parseDuration 解析时间字符串，额外支持 "d"（天）单位。
 func parseDuration(field, raw string) (time.Duration, error) {
-	if idx := strings.IndexByte(raw, 'd'); idx >= 0 {
-		d, err := strconv.ParseFloat(raw[:idx], 64)
+	if before, after, ok := strings.Cut(raw, "d"); ok {
+		d, err := strconv.ParseFloat(before, 64)
 		if err != nil {
-			return 0, fmt.Errorf("parse %s: invalid days %q: %w", field, raw[:idx], err)
+			return 0, fmt.Errorf("parse %s: invalid days %q: %w", field, before, err)
 		}
 		total := time.Duration(d * float64(24*time.Hour))
-		if rest := raw[idx+1:]; rest != "" {
+		if rest := after; rest != "" {
 			sub, err := time.ParseDuration(rest)
 			if err != nil {
 				return 0, fmt.Errorf("parse %s: %w", field, err)

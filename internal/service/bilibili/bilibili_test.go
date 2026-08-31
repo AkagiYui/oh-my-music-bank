@@ -43,8 +43,8 @@ func TestSignWBIAppendsSignature(t *testing.T) {
 		t.Fatalf("missing wts: %s", q)
 	}
 	// w_rid 应为 32 位十六进制 md5。
-	idx := strings.Index(q, "w_rid=")
-	if got := q[idx+len("w_rid="):]; len(got) != 32 {
+	_, after, _ := strings.Cut(q, "w_rid=")
+	if got := after; len(got) != 32 {
 		t.Fatalf("w_rid len = %d, want 32 (%s)", len(got), got)
 	}
 }
