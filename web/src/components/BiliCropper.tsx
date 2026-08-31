@@ -3,6 +3,7 @@ import { requestAudioFocus, subscribeAudioFocus } from '../lib/audio-focus';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { formatDuration } from '../lib/utils';
+import { useAudioWaveform } from '../hooks/use-audio-waveform';
 
 type CropperProps = {
   src: string;
@@ -17,6 +18,7 @@ export function BiliCropper(props: CropperProps) {
 }
 function CropperSession(props: CropperProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const waveform = useAudioWaveform(audioRef, props.src);
   const barRef = useRef<HTMLDivElement>(null);
   const segmentPreview = useRef(false);
   const wantsPlay = useRef(false);
@@ -84,7 +86,7 @@ function CropperSession(props: CropperProps) {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <audio
         ref={audioRef}
         src={props.src}
@@ -116,9 +118,22 @@ function CropperSession(props: CropperProps) {
         onPause={() => setPlaying(false)}
         onError={() => notifyError('音频加载失败，请刷新视频后重试')}
       />
+      <div className="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:justify-between">
+        <span>完整音频 · 振幅波形</span>
+        <span role="status">
+          {waveform.status === 'unavailable'
+            ? '波形暂不可用，仍可试听和裁剪'
+            : waveform.status === 'loading'
+              ? '正在绘制已加载部分…'
+              : waveform.status === 'waiting'
+                ? '等待音频缓冲…'
+                : '已加载部分显示波形，空白处尚未加载'}
+        </span>
+      </div>
       <div
         ref={barRef}
-        className="relative h-10 cursor-pointer touch-none select-none rounded-none border bg-muted"
+        data-testid="bili-timeline"
+        className="relative h-20 cursor-pointer touch-none select-none rounded-none border bg-muted"
         onPointerDown={(e) => {
           if (drag.current) return;
           const time = timeAt(e.clientX);
@@ -126,8 +141,28 @@ function CropperSession(props: CropperProps) {
           setCur(time);
         }}
       >
+        {/* 波形始终按整段时长定位；背景不接收指针，保留点击跳播与起止点拖动。 */}
+        <svg
+          data-testid="audio-waveform"
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 size-full text-foreground/45"
+          viewBox="0 0 1600 100"
+          preserveAspectRatio="none"
+        >
+          {waveform.buffered.map((range) => (
+            <rect
+              key={range.start}
+              x={(range.start / dur) * 1600}
+              y="0"
+              width={((range.end - range.start) / dur) * 1600}
+              height="100"
+              className="fill-primary/5"
+            />
+          ))}
+          <path d={waveform.path} fill="currentColor" />
+        </svg>
         <div
-          className="absolute inset-y-0 bg-primary/25"
+          className="pointer-events-none absolute inset-y-0 border-x border-primary/50 bg-primary/15"
           style={{ left: pct(props.start), width: pct(props.end - props.start) }}
         />
         <div className="absolute inset-y-0 w-0.5 bg-foreground/60" style={{ left: pct(cur) }} />

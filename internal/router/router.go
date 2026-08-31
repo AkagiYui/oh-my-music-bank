@@ -66,10 +66,11 @@ func Setup(deps SetupDeps) *gin.Engine {
 	engine.MaxMultipartMemory = 32 << 20
 
 	engine.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key"},
-		ExposeHeaders:    []string{"Content-Length"},
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key", "Range"},
+		// 前后端分离部署时，波形解码器需要读取 Range 响应的边界与完整文件大小。
+		ExposeHeaders:    []string{"Content-Length", "Content-Range", "Accept-Ranges"},
 		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	}))
