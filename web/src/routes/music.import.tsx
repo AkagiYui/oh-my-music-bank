@@ -11,6 +11,7 @@ import { Input } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { BiliCropper } from '../components/BiliCropper';
 import { formatDuration } from '../lib/utils';
+import { Field, FieldGroup, FieldLabel } from '../components/ui/field';
 export const Route = createFileRoute('/music/import')({
   component: ImportPage,
 });
@@ -23,9 +24,85 @@ function ImportPage() {
     queryKey: ['admin.import:status'],
     queryFn: () => api.admin.bilibili.status(),
   });
-  const { data: folders } = useQuery({
-    queryKey: ['admin.import:folders'],
-    queryFn: () => api.admin.bilibili.favorites().catch(() => []),
+  const {
+    data: accounts,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['bilibili:accounts'],
+    queryFn: api.admin.bilibili.accounts,
+  });
+  const [selectedAccount, setSelectedAccount] = useState('');
+  const accountId = selectedAccount || status?.defaultAccountId || accounts?.find((a) => a.isDefault)?.id || '';
+  // 与分 P 选择共用主题弹层；items 保证弹层首次打开前就能显示账号名称。
+  const accountItems = [
+    { value: '', label: '请选择账号', disabled: false },
+    ...(accounts ?? []).map((account) => ({
+      value: account.id,
+      label: `${account.name}${account.isDefault ? '（默认）' : ''}${account.status === 'expired' ? '（登录失效）' : ''}`,
+      disabled: account.status === 'expired',
+    })),
+  ];
+  return (
+    <div className="flex flex-col gap-4">
+      <h1 className="text-2xl font-semibold">从哔哩哔哩导入</h1>
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="bili-import-account">导入账号</FieldLabel>
+          <Select
+            items={accountItems}
+            value={accountId}
+            onValueChange={(value) => {
+              if (value !== null) setSelectedAccount(value);
+            }}
+          >
+            <SelectTrigger id="bili-import-account" aria-label="导入账号" className="w-full min-w-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {accountItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </Field>
+      </FieldGroup>
+      <p className="text-sm text-muted-foreground">
+        切换账号会清空当前收藏夹和裁剪选择；已提交任务仍使用提交时的账号。
+        <Link to="/admin/integrations" className="underline">
+          管理账号
+        </Link>
+      </p>
+      {error && (
+        <Button variant="outline" onClick={() => void refetch()}>
+          账号加载失败，重试
+        </Button>
+      )}
+      {/* 按账号重建工作区，同时销毁分页、视频选择与媒体令牌，避免跨账号复用。 */}
+      <ImportWorkspace
+        key={accountId}
+        accountId={accountId}
+        configured={
+          !!status?.configured && !!accountId && !!accounts?.some((a) => a.id === accountId && a.status !== 'expired')
+        }
+      />
+    </div>
+  );
+}
+
+function ImportWorkspace({ accountId, configured }: { accountId: string; configured: boolean }) {
+  const {
+    data: folders,
+    error: folderError,
+    refetch: refetchFolders,
+  } = useQuery({
+    queryKey: ['admin.import:folders', accountId],
+    queryFn: () => api.admin.bilibili.favorites(accountId),
+    enabled: configured,
   });
   const [items, setItems] = useState<BiliMedia[]>([]);
   const [folderPage, setFolderPage] = useState(1);
@@ -54,11 +131,11 @@ function ImportPage() {
   const page = () => video?.pages.find((p) => p.cid === cid);
   const duration = () => page()?.duration ?? 0;
   const { data: streamUrl, isFetching: streamUrlLoading } = useQuery({
-    queryKey: ['admin.import:streamUrl', video?.bvid, cid],
+    queryKey: ['admin.import:streamUrl', accountId, video?.bvid, cid],
     // 媒体令牌有独立有效期，不沿用普通业务数据的缓存周期。
     staleTime: 0,
     gcTime: 0,
-    queryFn: () => api.admin.bilibili.streamUrl(video!.bvid, cid),
+    queryFn: () => api.admin.bilibili.streamUrl(video!.bvid, cid, accountId),
     enabled: Boolean(video && cid),
   });
   async function openFolder(id: number, pn = 1) {
@@ -66,7 +143,7 @@ function ImportPage() {
     setFolderId(id);
     clearFeedback();
     try {
-      const r = await api.admin.bilibili.favoriteItems(id, pn);
+      const r = await api.admin.bilibili.favoriteItems(id, pn, accountId);
       if (token !== folderRequest.current) return;
       setItems(r.items);
       setFolderPage(pn);
@@ -81,7 +158,7 @@ function ImportPage() {
     const token = ++videoRequest.current;
     clearFeedback();
     try {
-      const info = await api.admin.bilibili.resolve(bvid.trim());
+      const info = await api.admin.bilibili.resolve(bvid.trim(), accountId);
       if (token !== videoRequest.current) return;
       if (!info.pages.length) throw new Error('视频没有可用分 P');
       // 新视频加载成功后再替换内容，失败时保留当前裁剪状态。
@@ -127,7 +204,7 @@ function ImportPage() {
         body.startSec = start;
         body.endSec = end;
       }
-      await api.admin.jobs.bilibili([{ ...body, trackId: target.trim() }]);
+      await api.admin.jobs.bilibili([{ ...body, accountId, trackId: target.trim() }]);
       void invalidateJobQueries();
       setMsg('已加入后台任务，可在收录任务中查看进度');
     } catch (e) {
@@ -142,6 +219,7 @@ function ImportPage() {
     clearFeedback();
     try {
       const r = await api.admin.bilibili.recognize({
+        accountId,
         bvid: video!.bvid,
         cid: cid,
         startSec: start,
@@ -158,9 +236,12 @@ function ImportPage() {
   }
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">从哔哩哔哩导入</h1>
-
-      {status?.configured ? (
+      {folderError && (
+        <Button variant="outline" onClick={() => void refetchFolders()}>
+          收藏夹加载失败，重试
+        </Button>
+      )}
+      {configured ? (
         <>
           {/* 来源：收藏夹 + 直接输入 BV 号 */}
           <Card>
@@ -225,9 +306,10 @@ function ImportPage() {
                     try {
                       const tasks: Record<string, unknown>[] = [];
                       for (const bvid of selected) {
-                        const info = await api.admin.bilibili.resolve(bvid);
+                        const info = await api.admin.bilibili.resolve(bvid, accountId);
                         for (const p of info.pages)
                           tasks.push({
+                            accountId,
                             bvid,
                             cid: p.cid,
                             title: info.pages.length > 1 ? p.part : info.title,
@@ -438,7 +520,7 @@ function ImportPage() {
       ) : (
         <Card>
           <CardContent className="p-4 text-sm">
-            尚未配置哔哩哔哩 Cookie，请先前往{' '}
+            尚未选择可用的哔哩哔哩账号，请先前往{' '}
             <Link to="/admin/integrations" className="text-primary hover:underline">
               集成配置
             </Link>

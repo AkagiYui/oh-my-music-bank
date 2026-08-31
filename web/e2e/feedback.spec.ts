@@ -145,12 +145,12 @@ test('导入裁剪和集成测试失败使用浮层并保留页面内容', async
   expect(await layout(page)).toEqual(before);
 
   await page.goto('/admin/integrations');
-  await expect(page.getByRole('button', { name: '测试 B 站连接' })).toBeVisible();
-  await page.route('**/api/v1/admin/integrations/test', (route) =>
+  await expect(page.getByRole('button', { name: '检查并刷新' })).toBeVisible();
+  await page.route('**/api/v1/admin/bilibili/accounts/bili-1/refresh', (route) =>
     route.fulfill({ status: 503, json: { error: { message: '连接测试失败' } } }),
   );
   const integrations = await layout(page);
-  await page.getByRole('button', { name: '测试 B 站连接' }).click();
+  await page.getByRole('button', { name: '检查并刷新' }).click();
   await expect(page.locator('[data-sonner-toast][data-front="true"] [data-description]')).toHaveText('连接测试失败');
   await expect(page.getByText('连接测试失败', { exact: true })).toHaveCount(1);
   expect(await layout(page)).toEqual(integrations);

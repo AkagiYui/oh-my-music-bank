@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"github.com/akagiyui/oh-my-music-bank/internal/model"
 	"io"
@@ -26,10 +27,11 @@ import (
 
 // BilibiliHandler 处理从哔哩哔哩收藏夹导入音频、裁剪、听歌识曲。
 type BilibiliHandler struct {
-	db    *gorm.DB
-	store *objectstore.Store
-	cache *cache.Manager
-	bili  *bilibili.Client
+	db       *gorm.DB
+	store    *objectstore.Store
+	cache    *cache.Manager
+	bili     *bilibili.Client
+	accounts *bilibili.Accounts
 
 	mu       sync.Mutex
 	urlCache map[string]cachedURL
@@ -41,31 +43,42 @@ type cachedURL struct {
 }
 
 // NewBilibiliHandler 创建处理器。
-func NewBilibiliHandler(db *gorm.DB, store *objectstore.Store, c *cache.Manager, bili *bilibili.Client) *BilibiliHandler {
-	return &BilibiliHandler{db: db, store: store, cache: c, bili: bili, urlCache: map[string]cachedURL{}}
+func NewBilibiliHandler(db *gorm.DB, store *objectstore.Store, c *cache.Manager, client *bilibili.Client) *BilibiliHandler {
+	return &BilibiliHandler{db: db, store: store, cache: c, bili: client, accounts: bilibili.NewAccounts(db, client), urlCache: map[string]cachedURL{}}
 }
 
-func (h *BilibiliHandler) cookie() string { return h.cache.GetSetting("bilibili.cookie") }
-
-func (h *BilibiliHandler) requireCookie(c *gin.Context) bool {
-	if h.cookie() == "" {
-		c.JSON(http.StatusBadRequest, pkgerrors.New("not_configured", "请先在「集成」中配置哔哩哔哩 Cookie"))
-		return false
+func (h *BilibiliHandler) requireAccount(c *gin.Context) (model.BilibiliAccount, bool) {
+	a, err := h.accounts.Credentials(c.Request.Context(), c.Query("accountId"))
+	if err != nil {
+		accountError(c, err)
+		return a, false
 	}
-	return true
+	return a, true
 }
 
-// Status 返回是否已配置 Cookie。
+// Status 只返回账号状态，不回显凭据。
 func (h *BilibiliHandler) Status(c *gin.Context) {
-	response.Success(c, gin.H{"configured": h.cookie() != ""})
+	rows, err := h.accounts.List(c.Request.Context())
+	if err != nil {
+		accountError(c, err)
+		return
+	}
+	defaultID := ""
+	for _, a := range rows {
+		if a.IsDefault {
+			defaultID = a.ID
+		}
+	}
+	response.Success(c, gin.H{"configured": len(rows) > 0, "defaultAccountId": defaultID})
 }
 
 // Favorites 列出收藏夹。
 func (h *BilibiliHandler) Favorites(c *gin.Context) {
-	if !h.requireCookie(c) {
+	a, ok := h.requireAccount(c)
+	if !ok {
 		return
 	}
-	folders, err := h.bili.FavFolders(c.Request.Context(), h.cookie())
+	folders, err := h.bili.FavFolders(c.Request.Context(), a.Cookie)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, pkgerrors.New("bilibili_error", err.Error()))
 		return
@@ -75,12 +88,13 @@ func (h *BilibiliHandler) Favorites(c *gin.Context) {
 
 // FavoriteItems 分页列出收藏夹中的视频。
 func (h *BilibiliHandler) FavoriteItems(c *gin.Context) {
-	if !h.requireCookie(c) {
+	a, ok := h.requireAccount(c)
+	if !ok {
 		return
 	}
 	mediaID, _ := strconv.ParseInt(c.Param("mediaId"), 10, 64)
 	pn, _ := strconv.Atoi(c.DefaultQuery("pn", "1"))
-	items, hasMore, err := h.bili.FavResources(c.Request.Context(), h.cookie(), mediaID, pn)
+	items, hasMore, err := h.bili.FavResources(c.Request.Context(), a.Cookie, mediaID, pn)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, pkgerrors.New("bilibili_error", err.Error()))
 		return
@@ -90,7 +104,8 @@ func (h *BilibiliHandler) FavoriteItems(c *gin.Context) {
 
 // Resolve 返回视频信息（含分 P 的 cid），供前端选择与裁剪。
 func (h *BilibiliHandler) Resolve(c *gin.Context) {
-	if !h.requireCookie(c) {
+	a, ok := h.requireAccount(c)
+	if !ok {
 		return
 	}
 	bvid := strings.TrimSpace(c.Query("bvid"))
@@ -98,7 +113,7 @@ func (h *BilibiliHandler) Resolve(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest("bvid required"))
 		return
 	}
-	info, err := h.bili.View(c.Request.Context(), h.cookie(), bvid)
+	info, err := h.bili.View(c.Request.Context(), a.Cookie, bvid)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, pkgerrors.New("bilibili_error", err.Error()))
 		return
@@ -107,8 +122,9 @@ func (h *BilibiliHandler) Resolve(c *gin.Context) {
 }
 
 // audioURL 解析并缓存音频直链（约 120 分钟有效，缓存 100 分钟）。
-func (h *BilibiliHandler) audioURL(ctx context.Context, bvid string, cid int64) (string, error) {
-	key := bvid + ":" + strconv.FormatInt(cid, 10)
+func (h *BilibiliHandler) audioURL(ctx context.Context, a model.BilibiliAccount, bvid string, cid int64) (string, error) {
+	// 账号与凭据版本共同隔离缓存，刷新/重新登录后不能继续命中旧权限的直链。
+	key := fmt.Sprintf("%s:%x:%s:%d", a.ID, sha256.Sum256([]byte(a.Cookie)), bvid, cid)
 	h.mu.Lock()
 	if cu, ok := h.urlCache[key]; ok && time.Since(cu.at) < 100*time.Minute {
 		h.mu.Unlock()
@@ -116,7 +132,7 @@ func (h *BilibiliHandler) audioURL(ctx context.Context, bvid string, cid int64) 
 	}
 	h.mu.Unlock()
 
-	stream, err := h.bili.BestAudio(ctx, h.cookie(), bvid, cid)
+	stream, err := h.bili.BestAudio(ctx, a.Cookie, bvid, cid)
 	if err != nil {
 		return "", err
 	}
@@ -137,13 +153,17 @@ func (h *BilibiliHandler) audioURL(ctx context.Context, bvid string, cid int64) 
 // Stream 代理哔哩哔哩音频（携带 Referer），支持 Range，供前端裁剪预览。
 // 通过 MediaTokenAuth（query token）鉴权。
 func (h *BilibiliHandler) Stream(c *gin.Context) {
+	a, ok := h.requireAccount(c)
+	if !ok {
+		return
+	}
 	bvid := strings.TrimSpace(c.Query("bvid"))
 	cid, _ := strconv.ParseInt(c.Query("cid"), 10, 64)
 	if bvid == "" || cid == 0 {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest("bvid/cid required"))
 		return
 	}
-	audioURL, err := h.audioURL(c.Request.Context(), bvid, cid)
+	audioURL, err := h.audioURL(c.Request.Context(), a, bvid, cid)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, pkgerrors.New("bilibili_error", err.Error()))
 		return
@@ -168,8 +188,8 @@ func (h *BilibiliHandler) Stream(c *gin.Context) {
 }
 
 // downloadToTemp 下载音频到临时文件，返回路径（调用方负责删除）。
-func (h *BilibiliHandler) downloadToTemp(ctx context.Context, bvid string, cid int64) (string, error) {
-	audioURL, err := h.audioURL(ctx, bvid, cid)
+func (h *BilibiliHandler) downloadToTemp(ctx context.Context, a model.BilibiliAccount, bvid string, cid int64) (string, error) {
+	audioURL, err := h.audioURL(ctx, a, bvid, cid)
 	if err != nil {
 		return "", err
 	}
@@ -187,20 +207,22 @@ func (h *BilibiliHandler) downloadToTemp(ctx context.Context, bvid string, cid i
 
 // Ingest 把（可裁剪的）视频音频加入音乐库，保留原始编码。
 type BiliIngestRequest struct {
-	Bvid     string  `json:"bvid"`
-	Cid      int64   `json:"cid"`
-	StartSec float64 `json:"startSec"`
-	EndSec   float64 `json:"endSec"`
-	Title    string  `json:"title"`
-	Artist   string  `json:"artist"`
-	TrackID  string  `json:"trackId"`
+	AccountID string  `json:"accountId"`
+	Bvid      string  `json:"bvid"`
+	Cid       int64   `json:"cid"`
+	StartSec  float64 `json:"startSec"`
+	EndSec    float64 `json:"endSec"`
+	Title     string  `json:"title"`
+	Artist    string  `json:"artist"`
+	TrackID   string  `json:"trackId"`
 }
 
 func (h *BilibiliHandler) ingest(ctx context.Context, req BiliIngestRequest) (*model.Track, bool, error) {
-	if h.cookie() == "" {
-		return nil, false, fmt.Errorf("B 站 Cookie 未配置")
+	a, err := h.accounts.Credentials(ctx, req.AccountID)
+	if err != nil {
+		return nil, false, err
 	}
-	info, err := h.bili.View(ctx, h.cookie(), req.Bvid)
+	info, err := h.bili.View(ctx, a.Cookie, req.Bvid)
 	if err != nil {
 		return nil, false, err
 	}
@@ -216,7 +238,7 @@ func (h *BilibiliHandler) ingest(ctx context.Context, req BiliIngestRequest) (*m
 	if err := audioproc.ValidateSegment(req.StartSec, req.EndSec, duration); err != nil {
 		return nil, false, err
 	}
-	srcPath, err := h.downloadToTemp(ctx, req.Bvid, req.Cid)
+	srcPath, err := h.downloadToTemp(ctx, a, req.Bvid, req.Cid)
 	if err != nil {
 		return nil, false, err
 	}
@@ -256,18 +278,21 @@ func (h *BilibiliHandler) Ingest(c *gin.Context) {
 }
 
 func (h *BilibiliHandler) Recognize(c *gin.Context) {
-	if !h.requireCookie(c) {
-		return
-	}
 	var req struct {
-		Bvid     string  `json:"bvid" binding:"required"`
-		Cid      int64   `json:"cid" binding:"required"`
-		StartSec float64 `json:"startSec"`
-		EndSec   float64 `json:"endSec"`
-		Provider string  `json:"provider"`
+		AccountID string  `json:"accountId"`
+		Bvid      string  `json:"bvid" binding:"required"`
+		Cid       int64   `json:"cid" binding:"required"`
+		StartSec  float64 `json:"startSec"`
+		EndSec    float64 `json:"endSec"`
+		Provider  string  `json:"provider"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest(err.Error()))
+		return
+	}
+	a, err := h.accounts.Credentials(c.Request.Context(), req.AccountID)
+	if err != nil {
+		accountError(c, err)
 		return
 	}
 
@@ -283,7 +308,7 @@ func (h *BilibiliHandler) Recognize(c *gin.Context) {
 		c.JSON(400, pkgerrors.BadRequest("请先配置讯飞识别"))
 		return
 	}
-	srcPath, err := h.downloadToTemp(c.Request.Context(), req.Bvid, req.Cid)
+	srcPath, err := h.downloadToTemp(c.Request.Context(), a, req.Bvid, req.Cid)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, pkgerrors.New("bilibili_error", err.Error()))
 		return

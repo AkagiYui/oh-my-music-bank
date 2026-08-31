@@ -36,16 +36,23 @@ func mediaURL(c *gin.Context, resource string) string {
 	u.RawQuery = q.Encode()
 	return u.String()
 }
-func BiliMediaToken(c *gin.Context) {
+func (h *BilibiliHandler) MediaToken(c *gin.Context) {
 	var r struct {
-		Bvid string `json:"bvid"`
-		CID  int64  `json:"cid"`
+		AccountID string `json:"accountId"`
+		Bvid      string `json:"bvid"`
+		CID       int64  `json:"cid"`
 	}
 	if c.ShouldBindJSON(&r) != nil || r.Bvid == "" || r.CID <= 0 {
 		c.JSON(400, pkgerrors.BadRequest("bvid/cid required"))
 		return
 	}
-	response.Success(c, gin.H{"url": mediaURL(c, fmt.Sprintf("/api/v1/admin/bilibili/stream?bvid=%s&cid=%d", url.QueryEscape(r.Bvid), r.CID))})
+	a, err := h.accounts.Get(c.Request.Context(), r.AccountID)
+	if err != nil {
+		accountError(c, err)
+		return
+	}
+	// 账号 ID 是媒体签名资源的一部分，不能替换查询参数借用其他账号。
+	response.Success(c, gin.H{"url": mediaURL(c, fmt.Sprintf("/api/v1/admin/bilibili/stream?accountId=%s&bvid=%s&cid=%d", url.QueryEscape(a.ID), url.QueryEscape(r.Bvid), r.CID))})
 }
 func ServeMedia(db *gorm.DB, store *objectstore.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {

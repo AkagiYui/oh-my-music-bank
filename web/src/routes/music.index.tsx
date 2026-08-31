@@ -19,7 +19,7 @@ function MusicOverview() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">曲库概览</h1>
+        <h1 className="text-2xl font-semibold">概览</h1>
         <p className="text-sm text-muted-foreground">管理曲目、艺术家和专辑，上传或导入音频，并查看后台收录进度。</p>
       </div>
       <div className="flex flex-wrap gap-2">

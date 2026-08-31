@@ -7,6 +7,34 @@
 - 存储：PostgreSQL + S3 兼容对象存储（如雨云 RainS3）
 - 音频解析：`dhowden/tag`（内嵌标签）+ `ffprobe`（技术参数）
 
+## 哔哩哔哩账号与 Cookie 刷新
+
+在「系统管理 → 集成配置」点击「扫码添加账号」，使用哔哩哔哩 App 扫码并在手机上确认。
+二维码有效期为 3 分钟，过期可重新生成；同一 UID 重复登录会更新已有账号，不会产生重复项。
+账号在本站管理员之间共享（不是新增本站用户），可设置默认账号、检查并刷新 Cookie，或从本站移除。
+移除仅删除本站保存的凭据，不注销 B 站其他设备；依赖被移除账号的未完成导入任务会失败，不会借用其他账号。
+
+「曲库管理 → 哔哩哔哩导入」可独立选择账号。收藏夹、视频解析、识曲、预览和新任务均绑定所选账号；
+切换账号会清空当前选择和裁剪内容，已提交任务保持原账号。无需新增启动配置，仍使用 `vp -C web run dev`。
+
+服务启动时及每小时巡检所有可刷新账号，每个账号每 12 小时检查一次，使用前也会按同样周期检查。
+「检查并刷新」可立即检查；只有 B 站返回需要刷新时才轮换 Cookie。
+新 Cookie 和 refresh_token 在数据库事务提交后才确认旧凭据失效；确认失败会记录待确认状态并自动重试。
+网络错误保留原凭据，明确的登录失效会提示重新扫码。第三方登录接口可能受 B 站风控或协议调整影响。
+
+升级会自动执行 `00007_bilibili_accounts.sql`，保留旧 `bilibili.cookie` 为「原有导入账号」，并固定旧任务的账号引用。
+旧配置没有 refresh_token，无法凭空恢复刷新能力，需重新扫码一次。已知 UID 的旧账号会原位升级。
+Cookie、刷新凭据只保存在服务端数据库，不返回前端、不写入账号服务 SQL 日志；请保护数据库和备份的访问权限。
+数据库回滚仅能把默认账号恢复为旧单 Cookie 配置，回滚前应备份多账号数据。
+
+实现参考 [PiliPlus 登录模块](https://github.com/bggRGjQaUbCoE/PiliPlus/blob/main/lib/http/login.dart)
+及 [按 UID 管理账号](https://github.com/bggRGjQaUbCoE/PiliPlus/blob/main/lib/utils/accounts/account.dart) 的流程，
+但使用适合本项目 Web API 的网页扫码协议，而非其 Android HD/TV 签名协议；不收集 B 站密码或短信验证码。
+网页刷新算法参考 [Cookie 刷新协议研究](https://github.com/pskdje/bilibili-API-collect/blob/main/docs/login/cookie_refresh.md)。
+
+自动化测试不会读取真实账号凭据。可用 `OMMB_BILI_LIVE=1 go test ./internal/service/bilibili -run TestLiveBilibiliQRSmoke -count=1`
+检查真实二维码生成与未扫码轮询（不输出二维码密钥、不完成登录）；登录后 Cookie 轮换仍需用实际扫码账号确认。
+
 ## 目录结构
 
 ```

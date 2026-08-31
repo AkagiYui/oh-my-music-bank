@@ -26,7 +26,13 @@ export function invalidateUserQueries() {
 }
 
 export function invalidateIntegrationQueries() {
-  return invalidate('admin.integrations:cfg', 'admin.import:status', 'admin.import:folders');
+  return invalidate(
+    'admin.integrations:cfg',
+    'bilibili:accounts',
+    'admin.import:status',
+    'admin.import:folders',
+    'admin.import:streamUrl',
+  );
 }
 
 export function invalidateJobQueries() {

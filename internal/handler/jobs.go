@@ -63,6 +63,19 @@ func NewJobs(db *gorm.DB, store *objectstore.Store, bili *BilibiliHandler, maxBy
 func (j *Jobs) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	j.cancel = cancel
+	j.wg.Go(func() {
+		// 启动即检查，之后每小时巡检；服务层对每个账号做十二小时节流。
+		t := time.NewTicker(time.Hour)
+		defer t.Stop()
+		for {
+			j.bili.accounts.Maintain(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
+	})
 	for range 2 {
 		j.wg.Go(func() {
 			t := time.NewTicker(time.Second)
@@ -184,6 +197,13 @@ func (j *Jobs) Bilibili(c *gin.Context) {
 	}
 	rows := make([]model.IngestJob, 0, len(req.Items))
 	for _, r := range req.Items {
+		// 提交时固定账号 ID，后台执行或重试不跟随管理员之后的默认账号切换。
+		account, err := j.bili.accounts.Get(c.Request.Context(), r.AccountID)
+		if err != nil || account.Status == "expired" {
+			c.JSON(400, pkgerrors.BadRequest("请选择可用的哔哩哔哩账号"))
+			return
+		}
+		r.AccountID = account.ID
 		if r.Bvid == "" || r.Cid <= 0 {
 			c.JSON(400, pkgerrors.BadRequest("bvid/cid required"))
 			return

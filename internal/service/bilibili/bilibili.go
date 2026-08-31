@@ -1,6 +1,6 @@
 // Package bilibili 封装从哔哩哔哩拉取收藏夹、视频信息与 DASH 音频流所需的 Web API。
 //
-// 鉴权使用管理员提供的 Cookie（SESSDATA 等）。部分接口需 WBI 签名。
+// 鉴权使用管理员扫码登录保存的账号 Cookie（SESSDATA 等）。部分接口需 WBI 签名。
 // 音频 CDN 地址下载需带 Referer，浏览器无法直连，故由后端代理流式转发。
 package bilibili
 

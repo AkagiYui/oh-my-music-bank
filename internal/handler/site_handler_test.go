@@ -207,7 +207,8 @@ func TestDefaultBrandCopyMigration(t *testing.T) {
 	if got := read(); got != defaults {
 		t.Fatalf("migration and runtime defaults differ: %+v", got)
 	}
-	must(t, goose.Down(sql, "migrations"))
+	// 定位文案迁移的前一版本，不假定它永远是最新迁移。
+	must(t, goose.DownTo(sql, "migrations", 5))
 	old := read()
 	if old == defaults {
 		t.Fatal("default copy was not rolled back")
@@ -218,14 +219,14 @@ func TestDefaultBrandCopyMigration(t *testing.T) {
 	}
 
 	// 已有站点只要一项文案自定义（包括主动清空），升级和回退就不得覆盖其内容。
-	must(t, goose.Down(sql, "migrations"))
+	must(t, goose.DownTo(sql, "migrations", 5))
 	must(t, db.Model(&model.Setting{}).Where("key = ?", "site.description").Update("value", "").Error)
 	custom := read()
 	must(t, storage.Migrate(db))
 	if got := read(); got != custom {
 		t.Fatalf("custom copy overwritten during upgrade: %+v", got)
 	}
-	must(t, goose.Down(sql, "migrations"))
+	must(t, goose.DownTo(sql, "migrations", 5))
 	if got := read(); got != custom {
 		t.Fatalf("custom copy overwritten during rollback: %+v", got)
 	}

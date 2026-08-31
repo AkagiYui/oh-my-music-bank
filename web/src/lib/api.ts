@@ -329,8 +329,28 @@ export interface MetaSong {
   lyric?: string;
   lrc?: string;
 }
+export interface BiliAccount {
+  id: string;
+  mid: string | null;
+  name: string;
+  avatar: string;
+  isDefault: boolean;
+  status: 'unchecked' | 'active' | 'expired';
+  canRefresh: boolean;
+  confirmPending: boolean;
+  lastCheckedAt: string | null;
+  lastRefreshedAt: string | null;
+}
+
+export interface BiliLogin {
+  id: string;
+  url?: string;
+  expiresAt: string;
+  status: 'waiting' | 'scanned' | 'expired' | 'success';
+  account?: BiliAccount;
+}
+
 export interface IntegrationsConfig {
-  bilibiliCookieSet: boolean;
   xfyunAppId: string;
   xfyunApiKeySet: boolean;
 }
@@ -505,7 +525,7 @@ export const api = {
           (r) => r.data,
         ),
       get: (): Promise<IntegrationsConfig> => request('/api/v1/admin/integrations', {}, true).then((r) => r.data),
-      update: (b: { bilibiliCookie?: string; xfyunAppId?: string; xfyunApiKey?: string }) =>
+      update: (b: { xfyunAppId?: string; xfyunApiKey?: string }) =>
         request('/api/v1/admin/integrations', { method: 'PUT', body: JSON.stringify(b) }, true),
     },
     metadata: {
@@ -519,20 +539,47 @@ export const api = {
         ),
     },
     bilibili: {
-      status: (): Promise<{ configured: boolean }> =>
+      accounts: (): Promise<BiliAccount[]> => request('/api/v1/admin/bilibili/accounts', {}, true).then((r) => r.data),
+      createLogin: (): Promise<BiliLogin> =>
+        request('/api/v1/admin/bilibili/login', { method: 'POST' }, true).then((r) => r.data),
+      pollLogin: (id: string): Promise<BiliLogin> =>
+        request(`/api/v1/admin/bilibili/login/${encodeURIComponent(id)}/poll`, { method: 'POST' }, true).then(
+          (r) => r.data,
+        ),
+      setDefaultAccount: (id: string) =>
+        request(`/api/v1/admin/bilibili/accounts/${encodeURIComponent(id)}/default`, { method: 'PUT' }, true),
+      deleteAccount: (id: string) =>
+        request(`/api/v1/admin/bilibili/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }, true),
+      refreshAccount: (id: string): Promise<{ account: BiliAccount; message: string }> =>
+        request(`/api/v1/admin/bilibili/accounts/${encodeURIComponent(id)}/refresh`, { method: 'POST' }, true).then(
+          (r) => r.data,
+        ),
+      status: (): Promise<{ configured: boolean; defaultAccountId: string }> =>
         request('/api/v1/admin/bilibili/status', {}, true).then((r) => r.data),
-      favorites: (): Promise<BiliFolder[]> => request('/api/v1/admin/bilibili/favorites', {}, true).then((r) => r.data),
-      favoriteItems: (mediaId: number, pn = 1): Promise<{ items: BiliMedia[]; hasMore: boolean }> =>
-        request(`/api/v1/admin/bilibili/favorites/${mediaId}?pn=${pn}`, {}, true).then((r) => r.data),
-      resolve: (bvid: string): Promise<BiliVideoInfo> =>
-        request(`/api/v1/admin/bilibili/resolve?bvid=${encodeURIComponent(bvid)}`, {}, true).then((r) => r.data),
-      streamUrl: (bvid: string, cid: number): Promise<string> =>
+      favorites: (accountId = ''): Promise<BiliFolder[]> =>
+        request(`/api/v1/admin/bilibili/favorites?accountId=${encodeURIComponent(accountId)}`, {}, true).then(
+          (r) => r.data,
+        ),
+      favoriteItems: (mediaId: number, pn = 1, accountId = ''): Promise<{ items: BiliMedia[]; hasMore: boolean }> =>
+        request(
+          `/api/v1/admin/bilibili/favorites/${mediaId}?pn=${pn}&accountId=${encodeURIComponent(accountId)}`,
+          {},
+          true,
+        ).then((r) => r.data),
+      resolve: (bvid: string, accountId = ''): Promise<BiliVideoInfo> =>
+        request(
+          `/api/v1/admin/bilibili/resolve?bvid=${encodeURIComponent(bvid)}&accountId=${encodeURIComponent(accountId)}`,
+          {},
+          true,
+        ).then((r) => r.data),
+      streamUrl: (bvid: string, cid: number, accountId = ''): Promise<string> =>
         request(
           '/api/v1/admin/bilibili/media-token',
-          { method: 'POST', body: JSON.stringify({ bvid, cid }) },
+          { method: 'POST', body: JSON.stringify({ bvid, cid, accountId }) },
           true,
         ).then((r) => r.data.url),
       ingest: (b: {
+        accountId?: string;
         bvid: string;
         cid: number;
         startSec?: number;
@@ -542,6 +589,7 @@ export const api = {
       }): Promise<any> =>
         request('/api/v1/admin/bilibili/ingest', { method: 'POST', body: JSON.stringify(b) }, true).then((r) => r.data),
       recognize: (b: {
+        accountId?: string;
         bvid: string;
         cid: number;
         startSec?: number;

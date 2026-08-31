@@ -133,6 +133,6 @@ test('分 P 保留数字 CID 和裁剪重置，识别服务的禁用项不能选
   await page.getByRole('button', { name: '识别此片段' }).click();
   await expect
     .poll(() => app.requests.find((request) => request.path.endsWith('/bilibili/recognize'))?.body)
-    .toEqual({ bvid: 'BVtest', cid: 2, startSec: 0, endSec: 180, provider: 'xfyun' });
+    .toEqual({ accountId: 'bili-1', bvid: 'BVtest', cid: 2, startSec: 0, endSec: 180, provider: 'xfyun' });
   app.assertNoErrors();
 });

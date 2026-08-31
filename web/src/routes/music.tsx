@@ -7,7 +7,7 @@ export const Route = createFileRoute('/music')({
 
 // 曲目及其关联资料、音频收录组成独立业务区，不再混入系统管理导航。
 const NAV: ManagementNavItem[] = [
-  { to: '/music', label: '曲库概览', exact: true },
+  { to: '/music', label: '概览', exact: true },
   { to: '/music/tracks', label: '曲目' },
   { to: '/music/artists', label: '艺术家' },
   { to: '/music/albums', label: '专辑' },

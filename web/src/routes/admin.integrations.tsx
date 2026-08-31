@@ -6,8 +6,8 @@ import { api } from '../lib/api';
 import { clearFeedback, notifyError } from '../lib/feedback';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Textarea } from '../components/ui/textarea';
+import { Field, FieldGroup, FieldLabel } from '../components/ui/field';
+import { BilibiliAccounts } from '../components/BilibiliAccounts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 export const Route = createFileRoute('/admin/integrations')({
   component: IntegrationsPage,
@@ -17,7 +17,6 @@ function IntegrationsPage() {
     queryKey: ['admin.integrations:cfg'],
     queryFn: () => api.admin.integrations.get(),
   });
-  const [cookie, setCookie] = useState('');
   const [appId, setAppId] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [saved, setSaved] = useState(false);
@@ -41,48 +40,21 @@ function IntegrationsPage() {
   }, [cfg]);
   async function save() {
     const body: {
-      bilibiliCookie?: string;
       xfyunAppId?: string;
       xfyunApiKey?: string;
     } = { xfyunAppId: appId.trim() };
-    if (cookie.trim()) body.bilibiliCookie = cookie.trim();
     if (apiKey.trim()) body.xfyunApiKey = apiKey.trim();
     await api.admin.integrations.update(body);
-    setCookie('');
     setApiKey('');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     void invalidateIntegrationQueries();
   }
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="flex max-w-3xl flex-col gap-4">
       <h1 className="text-2xl font-semibold">集成配置</h1>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>哔哩哔哩</CardTitle>
-          <CardDescription>
-            从浏览器登录 bilibili.com 后复制 Cookie（至少含 SESSDATA）。当前状态：
-            {cfg?.bilibiliCookieSet ? (
-              <>
-                <span className="text-green-600"> 已配置</span>
-              </>
-            ) : (
-              <span className="text-destructive"> 未配置</span>
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <Label htmlFor="cookie">Cookie（留空则不修改）</Label>
-          <Textarea
-            id="cookie"
-            rows={3}
-            placeholder="SESSDATA=xxx; bili_jct=xxx; ..."
-            value={cookie}
-            onChange={(e) => setCookie(e.currentTarget.value)}
-          />
-        </CardContent>
-      </Card>
+      <BilibiliAccounts />
 
       <Card>
         <CardHeader>
@@ -98,15 +70,17 @@ function IntegrationsPage() {
             )}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="appid">AppID</Label>
-            <Input id="appid" value={appId} onChange={(e) => setAppId(e.currentTarget.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="apikey">APIKey（留空则不修改）</Label>
-            <Input id="apikey" type="password" value={apiKey} onChange={(e) => setApiKey(e.currentTarget.value)} />
-          </div>
+        <CardContent>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="appid">AppID</FieldLabel>
+              <Input id="appid" value={appId} onChange={(e) => setAppId(e.currentTarget.value)} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="apikey">APIKey（留空则不修改）</FieldLabel>
+              <Input id="apikey" type="password" value={apiKey} onChange={(e) => setApiKey(e.currentTarget.value)} />
+            </Field>
+          </FieldGroup>
         </CardContent>
       </Card>
 
@@ -119,22 +93,8 @@ function IntegrationsPage() {
         ) : null}
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={testing} onClick={() => test('bilibili')}>
-          测试 B 站连接
-        </Button>
         <Button variant="outline" disabled={testing} onClick={() => test('xfyun')}>
           发送讯飞测试请求
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={async () => {
-            if (confirm('清除 B 站 Cookie？')) {
-              await api.admin.integrations.update({ bilibiliCookie: '' });
-              void invalidateIntegrationQueries();
-            }
-          }}
-        >
-          清除 B 站凭据
         </Button>
         <Button
           variant="ghost"

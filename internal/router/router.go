@@ -223,7 +223,13 @@ func Setup(deps SetupDeps) *gin.Engine {
 
 			bili := admin.Group("/bilibili")
 			{
-				bili.POST("/media-token", handler.BiliMediaToken)
+				bili.POST("/media-token", bilibiliHandler.MediaToken)
+				bili.GET("/accounts", bilibiliHandler.Accounts)
+				bili.POST("/login", bilibiliHandler.CreateLogin)
+				bili.POST("/login/:loginId/poll", bilibiliHandler.PollLogin)
+				bili.PUT("/accounts/:accountId/default", bilibiliHandler.DefaultAccount)
+				bili.POST("/accounts/:accountId/refresh", bilibiliHandler.RefreshAccount)
+				bili.DELETE("/accounts/:accountId", bilibiliHandler.DeleteAccount)
 				bili.GET("/status", bilibiliHandler.Status)
 				bili.GET("/favorites", bilibiliHandler.Favorites)
 				bili.GET("/favorites/:mediaId", bilibiliHandler.FavoriteItems)

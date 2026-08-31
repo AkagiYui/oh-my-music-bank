@@ -38,7 +38,7 @@ for (const width of [1280, 390]) {
       ['/search', '搜索音乐'],
       ['/dashboard', '账号设置'],
       ['/admin', '系统概览'],
-      ['/music', '曲库概览'],
+      ['/music', '概览'],
       ['/music/upload', '批量上传音频'],
       ['/music/jobs', '收录任务'],
       ['/music/import', '从哔哩哔哩导入'],

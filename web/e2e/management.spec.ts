@@ -21,8 +21,8 @@ test('曲库和系统管理独立导航、统计与页面标题', async ({ page 
 
   await page.getByRole('banner').getByRole('link', { name: '曲库管理', exact: true }).click();
   await expect(page).toHaveURL(/\/music$/);
-  await expect(page).toHaveTitle('曲库概览 · Music Bank');
-  await expect(page.getByRole('heading', { name: '曲库概览', exact: true })).toBeVisible();
+  await expect(page).toHaveTitle('概览 · Music Bank');
+  await expect(page.getByRole('heading', { name: '概览', exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: '系统管理', exact: true })).toHaveCount(0);
   await expect(page.getByRole('main').getByText('API Key', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('main').getByText('分发音频', { exact: true })).toBeVisible();
@@ -39,7 +39,7 @@ test('曲库和系统管理独立导航、统计与页面标题', async ({ page 
     await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
     await expect(page).toHaveTitle(`${label} · Music Bank`);
     await expect(musicNav.getByRole('link', { name: label, exact: true })).toHaveAttribute('aria-current', 'page');
-    await expect(musicNav.getByRole('link', { name: '曲库概览', exact: true })).not.toHaveAttribute('aria-current');
+    await expect(musicNav.getByRole('link', { name: '概览', exact: true })).not.toHaveAttribute('aria-current');
   }
   await page.getByRole('banner').getByRole('link', { name: '系统管理', exact: true }).click();
   await expect(page.getByRole('heading', { name: '系统概览', exact: true })).toBeVisible();

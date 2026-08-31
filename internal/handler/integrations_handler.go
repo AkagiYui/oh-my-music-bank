@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"github.com/akagiyui/oh-my-music-bank/internal/service/bilibili"
 	"github.com/akagiyui/oh-my-music-bank/internal/service/recognize"
 	"net/http"
 
@@ -12,7 +11,7 @@ import (
 	"github.com/akagiyui/oh-my-music-bank/pkg/response"
 )
 
-// IntegrationsHandler 管理外部集成的密钥（哔哩哔哩 Cookie、讯飞凭据）。
+// IntegrationsHandler 管理讯飞凭据；哔哩哔哩凭据只由账号登录流程写入。
 type IntegrationsHandler struct {
 	cache *cache.Manager
 }
@@ -25,9 +24,8 @@ func NewIntegrationsHandler(c *cache.Manager) *IntegrationsHandler {
 // Get 返回集成配置状态（敏感值不回显，只回显是否已配置）。
 func (h *IntegrationsHandler) Get(c *gin.Context) {
 	response.Success(c, gin.H{
-		"bilibiliCookieSet": h.cache.GetSetting("bilibili.cookie") != "",
-		"xfyunAppId":        h.cache.GetSetting("xfyun.app_id"),
-		"xfyunApiKeySet":    h.cache.GetSetting("xfyun.api_key") != "",
+		"xfyunAppId":     h.cache.GetSetting("xfyun.app_id"),
+		"xfyunApiKeySet": h.cache.GetSetting("xfyun.api_key") != "",
 	})
 }
 
@@ -44,7 +42,8 @@ func (h *IntegrationsHandler) Update(c *gin.Context) {
 	}
 	values := map[string]string{}
 	if req.BilibiliCookie != nil {
-		values["bilibili.cookie"] = *req.BilibiliCookie
+		c.JSON(400, pkgerrors.BadRequest("Cookie 导入已替换为扫码登录，请使用哔哩哔哩账号管理"))
+		return
 	}
 	if req.XfyunAppID != nil {
 		values["xfyun.app_id"] = *req.XfyunAppID
@@ -68,12 +67,7 @@ func (h *IntegrationsHandler) Test(c *gin.Context) {
 		return
 	}
 	if req.Provider == "bilibili" {
-		_, err := bilibili.New().SelfMID(c.Request.Context(), h.cache.GetSetting("bilibili.cookie"))
-		if err != nil {
-			c.JSON(502, pkgerrors.BadRequest("连接或认证失败: "+err.Error()))
-			return
-		}
-		response.Success(c, gin.H{"message": "B 站连接与认证正常"})
+		c.JSON(400, pkgerrors.BadRequest("请使用账号管理中的检查并刷新功能"))
 		return
 	}
 	if req.Provider == "xfyun" {

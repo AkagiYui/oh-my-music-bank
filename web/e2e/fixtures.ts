@@ -155,7 +155,24 @@ export async function mockApp(page: Page, loggedIn = true) {
       };
     else if (path.endsWith('/stats/timeseries'))
       response = { data: [{ date: '2026-08-31', requests: 5, registrations: 2 }] };
-    else if (path.endsWith('/bilibili/status')) response = { data: { configured: true } };
+    else if (path.endsWith('/bilibili/status')) response = { data: { configured: true, defaultAccountId: 'bili-1' } };
+    else if (path.endsWith('/bilibili/accounts'))
+      response = {
+        data: [
+          {
+            id: 'bili-1',
+            mid: '9007199254740993',
+            name: '测试 B 站账号',
+            avatar: '',
+            isDefault: true,
+            status: 'active',
+            canRefresh: true,
+            confirmPending: false,
+            lastCheckedAt: null,
+            lastRefreshedAt: null,
+          },
+        ],
+      };
     else if (path.endsWith('/bilibili/favorites')) response = { data: [{ id: 1, title: '测试收藏夹', mediaCount: 2 }] };
     else if (path.endsWith('/bilibili/favorites/1'))
       response = {
@@ -184,8 +201,7 @@ export async function mockApp(page: Page, loggedIn = true) {
       response = { data: { url: `/test-audio-${String(body.cid)}.wav` } };
     else if (path.endsWith('/bilibili/recognize'))
       response = { data: [{ title: '识别曲目', artist: '识别艺术家', source: 'xfyun' }] };
-    else if (path.endsWith('/integrations'))
-      response = { data: { bilibiliCookieSet: true, xfyunApiKeySet: true, xfyunAppId: 'test-app' } };
+    else if (path.endsWith('/integrations')) response = { data: { xfyunApiKeySet: true, xfyunAppId: 'test-app' } };
     else if (path.endsWith('/integrations/test')) response = { data: { message: '连接成功' } };
     else if (path.endsWith('/metadata/search'))
       response = {

@@ -8,7 +8,7 @@ test('所有页面在生产构建中正常渲染，浏览器无 React 错误', a
     ['/search', '搜索音乐'],
     ['/dashboard', '账号设置'],
     ['/admin', '系统概览'],
-    ['/music', '曲库概览'],
+    ['/music', '概览'],
     ['/music/upload', '批量上传音频'],
     ['/music/jobs', '收录任务'],
     ['/music/import', '从哔哩哔哩导入'],
@@ -103,8 +103,8 @@ test('哔哩哔哩分 P 切换和批量选中提交正确任务', async ({ page 
   await expect
     .poll(() => app.requests.find((r) => r.path.endsWith('/jobs/bilibili'))?.body.items)
     .toEqual([
-      { bvid: 'BVtest', cid: 1, title: '第一段', artist: '测试 UP' },
-      { bvid: 'BVtest', cid: 2, title: '第二段', artist: '测试 UP' },
+      { accountId: 'bili-1', bvid: 'BVtest', cid: 1, title: '第一段', artist: '测试 UP' },
+      { accountId: 'bili-1', bvid: 'BVtest', cid: 2, title: '第二段', artist: '测试 UP' },
     ]);
   await page.getByRole('button', { name: /测试视频.*测试 UP/ }).click();
   await expect(page.locator('audio')).toHaveAttribute('src', '/test-audio-1.wav');
@@ -114,7 +114,18 @@ test('哔哩哔哩分 P 切换和批量选中提交正确任务', async ({ page 
   await page.getByRole('button', { name: '加入此片段' }).click();
   await expect
     .poll(() => app.requests.filter((r) => r.path.endsWith('/jobs/bilibili')).at(-1)?.body.items)
-    .toEqual([{ bvid: 'BVtest', cid: 2, title: '测试视频', artist: '测试 UP', startSec: 0, endSec: 180, trackId: '' }]);
+    .toEqual([
+      {
+        accountId: 'bili-1',
+        bvid: 'BVtest',
+        cid: 2,
+        title: '测试视频',
+        artist: '测试 UP',
+        startSec: 0,
+        endSec: 180,
+        trackId: '',
+      },
+    ]);
   app.assertNoErrors();
 });
 
