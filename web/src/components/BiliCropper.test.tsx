@@ -1,8 +1,10 @@
 import { fireEvent, render } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vite-plus/test';
 import { BiliCropper } from './BiliCropper';
+const pause = vi.fn();
 beforeEach(() => {
-  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  pause.mockReset();
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(pause);
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
 });
 it('片段试听使用最新终点，换源后清理旧播放会话', () => {
@@ -14,7 +16,7 @@ it('片段试听使用最新终点，换源后清理旧播放会话', () => {
   screen.rerender(<BiliCropper src="/a.wav" duration={100} start={10} end={20} onChange={onChange} />);
   audio.currentTime = 21;
   fireEvent.timeUpdate(audio);
-  expect(audio.pause).toHaveBeenCalled();
+  expect(pause).toHaveBeenCalled();
   screen.rerender(<BiliCropper src="/b.wav" duration={50} start={0} end={50} onChange={onChange} />);
   expect(screen.container.querySelector('audio')).not.toBe(audio);
   expect(screen.container.querySelector('audio')!.getAttribute('src')).toBe('/b.wav');

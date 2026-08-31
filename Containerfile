@@ -10,14 +10,14 @@
 #   docker build --target all-in-one  -t oh-my-music-bank:all-in-one  .
 # =============================================================================
 
-# ---- Stage 1: 构建前端（SolidJS SPA）----
-FROM node:lts-alpine AS frontend-builder
+# ---- Stage 1: 使用固定版本 Vite+ 构建 React SPA ----
+FROM ghcr.io/voidzero-dev/vite-plus:0.3.0@sha256:bca24ac970b21298430ad281f306dbe0a17be3fd1d6c9ec5f2cc73da65740b88 AS frontend-builder
 WORKDIR /app/web
-RUN corepack enable
-COPY web/package.json web/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
-COPY web/ .
-RUN pnpm build
+# pnpm 的工具链别名位于 workspace 配置中，必须与锁文件一起复制。
+COPY --chown=vp:vp web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+RUN vp install --frozen-lockfile
+COPY --chown=vp:vp web/ .
+RUN vp build
 
 # ---- Stage 2: 构建 Go 后端 ----
 FROM golang:1.26-alpine AS backend-builder

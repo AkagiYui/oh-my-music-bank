@@ -26,7 +26,7 @@ function AdminLayout() {
   const { ready, isAdmin } = useAuth();
   const navigate = useNavigate();
   useEffect(() => {
-    if (ready && !isAdmin) navigate({ to: '/' });
+    if (ready && !isAdmin) void navigate({ to: '/' });
   }, [ready, isAdmin, navigate]);
   if (!ready || !isAdmin) return null;
   return (

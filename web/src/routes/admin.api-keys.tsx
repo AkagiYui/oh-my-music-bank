@@ -74,7 +74,7 @@ function ApiKeysPage() {
                               const rpm = Number(e.currentTarget.value);
                               if (rpm === (k.rpmOverride ?? 60)) return;
                               await api.admin.apiKeys.update(k.id, { rpmOverride: rpm });
-                              refetch();
+                              void refetch();
                             }}
                           />
                         </label>

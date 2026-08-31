@@ -28,13 +28,13 @@ function ArtistsPage() {
     if (!newName.trim()) return;
     await api.admin.artists.create(newName.trim());
     setNewName('');
-    refetch();
+    void refetch();
   }
   async function remove(id: string) {
     if (!confirm('删除该艺术家？')) return;
     await api.admin.artists.remove(id);
     if (editing === id) setEditing(null);
-    refetch();
+    void refetch();
   }
   return (
     <div className="space-y-4">
@@ -59,7 +59,7 @@ function ArtistsPage() {
               className="flex gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                create();
+                void create();
               }}
             >
               <Input placeholder="新建艺术家名" value={newName} onChange={(e) => setNewName(e.currentTarget.value)} />
@@ -135,17 +135,17 @@ function ArtistEditor(props: { id: string; onRenamed: () => void }) {
       avatarKey: avatarKey,
     });
     props.onRenamed();
-    refetch();
+    void refetch();
   }
   async function addAlias() {
     if (!aliasInput.trim()) return;
     await api.admin.artists.addAlias(props.id, aliasInput.trim());
     setAliasInput('');
-    refetch();
+    void refetch();
   }
   async function delAlias(aid: string) {
     await api.admin.artists.deleteAlias(props.id, aid);
-    refetch();
+    void refetch();
   }
   return (
     <div className="space-y-4">

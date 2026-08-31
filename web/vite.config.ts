@@ -1,23 +1,58 @@
-import { defineConfig } from 'vite';
+import { defineConfig, lazyPlugins } from 'vite-plus';
 import { fileURLToPath } from 'node:url';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-/**
- * Vite 配置（纯 SPA）。
- * - TanStack Router 文件式路由（history 模式）；`tanstackRouter` 必须排在 `react()` 之前。
- * - 开发期把 /api 与 /health 代理到本地 Go 后端（默认 :9111）。
- * - 构建产物为纯静态文件，由 Caddy 托管并做 SPA 回退。
- */
+// 检查工具无需实例化开发插件；路由生成仍须先于 React 转换执行。
 export default defineConfig({
-  base: '/',
-  plugins: [tanstackRouter({ target: 'react', autoCodeSplitting: true }), react(), tailwindcss()],
-  resolve: {
-    alias: {
-      '~': fileURLToPath(new URL('./src', import.meta.url)),
-    },
+  plugins: lazyPlugins(() => [tanstackRouter({ target: 'react', autoCodeSplitting: true }), react(), tailwindcss()]),
+  fmt: {
+    singleQuote: true,
+    semi: true,
+    printWidth: 120,
+    sortImports: false,
+    sortPackageJson: false,
+    ignorePatterns: ['dist/**', 'src/routeTree.gen.ts', 'test-results/**', 'playwright-report/**', '.vite-plus/**'],
   },
+  lint: {
+    plugins: ['oxc', 'typescript', 'unicorn', 'react'],
+    categories: { correctness: 'warn' },
+    ignorePatterns: ['dist/**', 'src/routeTree.gen.ts', 'test-results/**', 'playwright-report/**', '.vite-plus/**'],
+    options: { typeAware: true, typeCheck: true },
+    jsPlugins: [{ name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin' }],
+    rules: {
+      'vite-plus/prefer-vite-plus-imports': 'error',
+      // 保留查询回填编辑草稿的现有语义；本轮不引入 React Compiler 的额外渲染约束。
+      'react/set-state-in-effect': 'off',
+    },
+    overrides: [
+      {
+        files: ['src/**/*.{ts,tsx}'],
+        rules: {
+          'react/rules-of-hooks': 'error',
+          'react/exhaustive-deps': 'error',
+          'no-unused-vars': [
+            'error',
+            {
+              args: 'none',
+              argsIgnorePattern: '^_',
+              varsIgnorePattern: '^_',
+              caughtErrors: 'none',
+              ignoreRestSiblings: true,
+            },
+          ],
+        },
+      },
+    ],
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test-setup.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
+  },
+  base: '/',
+  resolve: { alias: { '~': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: {
     port: 5173,
     proxy: {
@@ -25,8 +60,5 @@ export default defineConfig({
       '/health': { target: 'http://localhost:9111', changeOrigin: true },
     },
   },
-  build: {
-    outDir: 'dist',
-    target: 'es2022',
-  },
+  build: { outDir: 'dist', target: 'es2022' },
 });

@@ -52,7 +52,7 @@ export function SiteHeader() {
                 variant="outline"
                 onClick={async () => {
                   await logout();
-                  navigate({ to: '/' });
+                  void navigate({ to: '/' });
                 }}
               >
                 退出

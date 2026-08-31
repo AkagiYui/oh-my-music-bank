@@ -50,7 +50,7 @@ function IntegrationsPage() {
     setApiKey('');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-    refetch();
+    void refetch();
   }
   return (
     <div className="max-w-2xl space-y-4">
@@ -128,7 +128,7 @@ function IntegrationsPage() {
           onClick={async () => {
             if (confirm('清除 B 站 Cookie？')) {
               await api.admin.integrations.update({ bilibiliCookie: '' });
-              refetch();
+              void refetch();
             }
           }}
         >
@@ -142,7 +142,7 @@ function IntegrationsPage() {
                 xfyunAppId: '',
                 xfyunApiKey: '',
               });
-              refetch();
+              void refetch();
             }
           }}
         >

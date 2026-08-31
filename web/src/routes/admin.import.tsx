@@ -176,7 +176,7 @@ function ImportPage() {
                 className="flex gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (bvInput.trim()) openVideo(bvInput);
+                  if (bvInput.trim()) void openVideo(bvInput);
                 }}
               >
                 <Input

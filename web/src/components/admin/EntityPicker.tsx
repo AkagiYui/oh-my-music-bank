@@ -66,7 +66,7 @@ export function EntityPicker(props: {
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
-              doSearch();
+              void doSearch();
             }
           }}
         />

@@ -43,7 +43,7 @@ function TracksPage() {
     if (!confirm('确认删除该曲目？相关音频与对象也会被清理。')) return;
     await api.admin.tracks.remove(id);
     if (editing === id) setEditing(null);
-    refetch();
+    void refetch();
   }
   return (
     <div className="space-y-4">
@@ -188,7 +188,7 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
         Object.fromEntries(Object.entries(values).filter(([key]) => metaFields.includes(key))),
       );
       setMetaResults([]);
-      refetch();
+      void refetch();
       props.onChanged();
     } finally {
       setMetaBusy(false);
@@ -203,17 +203,17 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
       lrcLyric: lrc,
     });
     props.onChanged();
-    refetch();
+    void refetch();
   }
   async function addAlias() {
     if (!aliasInput.trim()) return;
     await api.admin.tracks.addAlias(props.id, aliasInput.trim());
     setAliasInput('');
-    refetch();
+    void refetch();
   }
   async function delAlias(aid: string) {
     await api.admin.tracks.deleteAlias(props.id, aid);
-    refetch();
+    void refetch();
   }
   async function changeArtists(items: Entity[]) {
     setArtists(items);
@@ -237,7 +237,7 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
   async function delAudio(aid: string) {
     if (!confirm('删除该音质音频？')) return;
     await api.admin.audio.remove(aid);
-    refetch();
+    void refetch();
   }
   return (
     <div className="space-y-5">
@@ -275,7 +275,7 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
-                searchMeta();
+                void searchMeta();
               }
             }}
           />

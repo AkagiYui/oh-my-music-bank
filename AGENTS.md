@@ -18,11 +18,12 @@
 
 ## 前端（React SPA）
 
-- 技术栈：React + TanStack React Router（文件式路由）+ TanStack Query + Vite + Tailwind v4 + shadcn/ui。
-- 纯 SPA，无 SSR/SSG。在 `web/` 目录下操作。
-- 修改后：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm test:e2e` 与 `pnpm build`。
+- 技术栈：React + TanStack React Router（文件式路由）+ TanStack Query + Vite+（vp）+ Tailwind v4 + shadcn/ui。
+- 纯 SPA，无 SSR/SSG。在 `web/` 目录下操作，使用 `vp install --frozen-lockfile` 安装依赖。
+- 开发、测试、格式和 lint 配置统一放在 `web/vite.config.ts`；工具链版本及别名由 `web/pnpm-workspace.yaml` 管理。
+- 修改后：`vp check`、`vp test run`、`vp run test:e2e` 与 `vp build`。
 - Tailwind 任意值写法尽量简化为标准工具类（如 `w-[200px]` → `w-50`）。
-- `web/src/routeTree.gen.ts` 由插件在 `pnpm dev`/`pnpm build` 时自动生成（已提交以便全新检出可直接 typecheck），不要手改。
+- `web/src/routeTree.gen.ts` 由插件在 `vp dev`/`vp build` 时自动生成（已提交以便全新检出可直接 typecheck），不要手改。
 
 ## 安全
 

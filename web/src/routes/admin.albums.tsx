@@ -34,13 +34,13 @@ function AlbumsPage() {
     if (!newTitle.trim()) return;
     await api.admin.albums.create(newTitle.trim());
     setNewTitle('');
-    refetch();
+    void refetch();
   }
   async function remove(id: string) {
     if (!confirm('删除该专辑？')) return;
     await api.admin.albums.remove(id);
     if (editing === id) setEditing(null);
-    refetch();
+    void refetch();
   }
   return (
     <div className="space-y-4">
@@ -65,7 +65,7 @@ function AlbumsPage() {
               className="flex gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                create();
+                void create();
               }}
             >
               <Input placeholder="新建专辑名" value={newTitle} onChange={(e) => setNewTitle(e.currentTarget.value)} />
@@ -157,7 +157,7 @@ function AlbumEditor(props: { id: string; onRenamed: () => void }) {
       coverKey: coverKey,
     });
     props.onRenamed();
-    refetch();
+    void refetch();
   }
   async function changeArtists(items: Entity[]) {
     setArtists(items);
@@ -241,7 +241,7 @@ function AlbumEditor(props: { id: string; onRenamed: () => void }) {
           size="sm"
           onClick={async () => {
             await api.admin.albums.orderTracks(props.id, order);
-            refetch();
+            void refetch();
           }}
         >
           保存曲序

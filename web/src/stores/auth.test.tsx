@@ -1,5 +1,5 @@
 import { act, render } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vite-plus/test';
 import { api, getAccessToken, setTokens } from '../lib/api';
 import { queryClient } from '../lib/query-client';
 import { loadSession, login, logout, useAuth } from './auth';

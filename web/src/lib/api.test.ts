@@ -1,4 +1,4 @@
-import { it, expect, vi } from 'vitest';
+import { it, expect, vi } from 'vite-plus/test';
 import { api, setTokens, clearTokens, getAccessToken } from './api';
 it('退出后丢弃仍在返回的刷新结果', async () => {
   setTokens('old-access', 'old-refresh');

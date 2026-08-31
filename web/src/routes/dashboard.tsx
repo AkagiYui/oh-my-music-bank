@@ -14,7 +14,7 @@ function Dashboard() {
   const { user, ready, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   useEffect(() => {
-    if (ready && !isAuthenticated) navigate({ to: '/login' });
+    if (ready && !isAuthenticated) void navigate({ to: '/login' });
   }, [ready, isAuthenticated, navigate]);
   const [page, setPage] = useState(1);
   const {
@@ -43,7 +43,7 @@ function Dashboard() {
       const res = await api.apiKeys.create({ name: name.trim() || '未命名' });
       setCreated(res.key);
       setName('');
-      refetch();
+      void refetch();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
     } finally {
@@ -157,7 +157,7 @@ function Dashboard() {
             onSubmit={async (e) => {
               e.preventDefault();
               await api.profile.email(email);
-              loadSession();
+              void loadSession();
               setProfileMessage('邮箱已更新');
             }}
           >
@@ -176,7 +176,7 @@ function Dashboard() {
               e.preventDefault();
               await api.profile.password(currentPassword, newPassword);
               window.dispatchEvent(new Event('ommb:session-expired'));
-              navigate({ to: '/login' });
+              void navigate({ to: '/login' });
             }}
           >
             <Input

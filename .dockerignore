@@ -12,3 +12,7 @@ server
 .DS_Store
 README.md
 schema.sql
+
+web/.vite-plus
+web/test-results
+web/playwright-report

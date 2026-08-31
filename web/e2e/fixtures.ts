@@ -160,7 +160,8 @@ export async function mockApp(page: Page, loggedIn = true) {
           ],
         },
       };
-    else if (path.endsWith('/bilibili/media-token')) response = { data: { url: `/test-audio-${body.cid}.wav` } };
+    else if (path.endsWith('/bilibili/media-token'))
+      response = { data: { url: `/test-audio-${String(body.cid)}.wav` } };
     else if (path.endsWith('/bilibili/recognize'))
       response = { data: [{ title: '识别曲目', artist: '识别艺术家', source: 'xfyun' }] };
     else if (path.endsWith('/integrations'))

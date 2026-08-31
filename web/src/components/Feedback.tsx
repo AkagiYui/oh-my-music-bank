@@ -8,6 +8,7 @@ export function Feedback() {
       event.preventDefault();
     };
     window.addEventListener('ommb:api-error', apiError);
+    // 显式后台执行的界面动作若失败，仍统一显示错误，避免静默丢失。
     window.addEventListener('unhandledrejection', unhandled);
     return () => {
       window.removeEventListener('ommb:api-error', apiError);

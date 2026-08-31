@@ -22,7 +22,7 @@ function RegisterPage() {
     setLoading(true);
     try {
       const u = await register(username, email, password);
-      navigate({ to: u.role === 'admin' ? '/admin' : '/dashboard' });
+      void navigate({ to: u.role === 'admin' ? '/admin' : '/dashboard' });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
     } finally {

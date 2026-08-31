@@ -23,3 +23,6 @@ web/.vite/
 # 浏览器回归测试产物
 web/test-results/
 web/playwright-report/
+
+# Vite+ 本地任务缓存
+web/.vite-plus/
