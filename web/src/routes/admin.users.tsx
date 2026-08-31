@@ -1,4 +1,4 @@
-import { NativeSelect } from '../components/ui/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { useState, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { invalidateUserQueries } from '../lib/query-invalidation';
@@ -10,6 +10,10 @@ import { Card, CardContent } from '../components/ui/card';
 export const Route = createFileRoute('/admin/users')({
   component: UsersPage,
 });
+const roleItems = [
+  { value: 'user', label: 'user' },
+  { value: 'admin', label: 'admin' },
+];
 function UsersPage() {
   const [page, setPage] = useState(1);
   const { data: paged, isLoading: pagedLoading } = useQuery({
@@ -33,15 +37,27 @@ function UsersPage() {
                         <div className="truncate text-xs text-muted-foreground">{u.email}</div>
                       </div>
                       <div className="ml-auto flex items-center gap-2">
-                        <NativeSelect
+                        <Select
+                          items={roleItems}
                           value={u.role}
-                          onChange={(e) =>
-                            api.admin.users.setRole(u.id, e.currentTarget.value).then(() => invalidateUserQueries())
-                          }
+                          onValueChange={(value) => {
+                            if (value !== null)
+                              void api.admin.users.setRole(u.id, value).then(() => invalidateUserQueries());
+                          }}
                         >
-                          <option value="user">user</option>
-                          <option value="admin">admin</option>
-                        </NativeSelect>
+                          <SelectTrigger aria-label={`${u.username} 的角色`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {roleItems.map((item) => (
+                                <SelectItem key={item.value} value={item.value}>
+                                  {item.label}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
                         <Button
                           size="sm"
                           variant="ghost"

@@ -1,5 +1,5 @@
 import { invalidateJobQueries } from '../lib/query-invalidation';
-import { NativeSelect } from '../components/ui/native-select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Checkbox } from '../components/ui/checkbox';
 import { useRef, useState, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -14,6 +14,10 @@ import { formatDuration } from '../lib/utils';
 export const Route = createFileRoute('/admin/import')({
   component: ImportPage,
 });
+const providerItems = [
+  { value: 'xfyun', label: '讯飞', disabled: false },
+  { value: 'netease', label: '网易云（暂未支持）', disabled: true },
+];
 function ImportPage() {
   const { data: status } = useQuery({
     queryKey: ['admin.import:status'],
@@ -42,6 +46,11 @@ function ImportPage() {
   const [cands, setCands] = useState<RecognizeCandidate[] | null>(null);
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
+  // 保持 CID 为数字；items 让弹层首次打开前也能显示对应的分 P 标题。
+  const pageItems = (video?.pages ?? []).map((p) => ({
+    value: p.cid,
+    label: `P${p.page} ${p.part} (${formatDuration(p.duration)})`,
+  }));
   const page = () => video?.pages.find((p) => p.cid === cid);
   const duration = () => page()?.duration ?? 0;
   const { data: streamUrl, isFetching: streamUrlLoading } = useQuery({
@@ -299,19 +308,26 @@ function ImportPage() {
 
                 {video!.pages.length > 1 ? (
                   <>
-                    <NativeSelect
-                      className="w-full"
+                    <Select
+                      items={pageItems}
                       value={cid}
-                      onChange={(e) => selectPage(Number(e.currentTarget.value))}
+                      onValueChange={(value) => {
+                        if (value !== null) selectPage(value);
+                      }}
                     >
-                      {(video!.pages ?? []).map((p, index) => (
-                        <Fragment key={p.cid}>
-                          <option value={p.cid}>
-                            P{p.page} {p.part} ({formatDuration(p.duration)})
-                          </option>
-                        </Fragment>
-                      ))}
-                    </NativeSelect>
+                      <SelectTrigger aria-label="视频分 P" className="w-full min-w-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {pageItems.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
                   </>
                 ) : null}
 
@@ -350,12 +366,26 @@ function ImportPage() {
                     加入此片段
                   </Button>
                   <span className="mx-1 h-5 w-px bg-border" />
-                  <NativeSelect value={provider} onChange={(e) => setProvider(e.currentTarget.value)}>
-                    <option value="xfyun">讯飞</option>
-                    <option value="netease" disabled>
-                      网易云（暂未支持）
-                    </option>
-                  </NativeSelect>
+                  <Select
+                    items={providerItems}
+                    value={provider}
+                    onValueChange={(value) => {
+                      if (value !== null) setProvider(value);
+                    }}
+                  >
+                    <SelectTrigger aria-label="识别服务">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {providerItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                   <Button variant="outline" disabled={busy !== ''} onClick={recognize}>
                     {busy === 'recognize' ? '识别中…' : '识别此片段'}
                   </Button>

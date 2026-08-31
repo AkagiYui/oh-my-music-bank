@@ -1,4 +1,5 @@
 import { useSiteConfig } from '../components/SiteBranding';
+import { CodeBlock } from '../components/CodeBlock';
 import { resolveAPIOrigin } from '../lib/site';
 import { Badge } from '../components/ui/badge';
 import { Fragment } from 'react';
@@ -8,13 +9,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 export const Route = createFileRoute('/')({
   component: Home,
 });
-function Code(props: { children: string }) {
-  return (
-    <pre className="overflow-auto rounded-none border bg-muted/40 p-3 font-mono text-xs leading-relaxed">
-      <code>{props.children}</code>
-    </pre>
-  );
-}
 const ENDPOINTS: {
   method: string;
   path: string;
@@ -75,8 +69,8 @@ function Home() {
               </p>
             </Step>
             <Step n={3} title="带上 Key 调用开放接口">
-              <Code>{`curl -H "X-API-Key: omb_你的密钥" \\
-  "${apiOrigin}/api/open/v1/search?q=告白气球"`}</Code>
+              <CodeBlock language="bash">{`curl -H "X-API-Key: omb_你的密钥" \\
+  "${apiOrigin}/api/open/v1/search?q=告白气球"`}</CodeBlock>
             </Step>
           </CardContent>
         </Card>
@@ -109,7 +103,7 @@ function Home() {
             </div>
             <div className="space-y-1">
               <div className="text-sm font-medium">返回示例（搜索）</div>
-              <Code>{`{
+              <CodeBlock language="json">{`{
   "data": [
     {
       "id": "123456789",
@@ -120,7 +114,7 @@ function Home() {
     }
   ],
   "total": 1, "page": 1, "pageSize": 20
-}`}</Code>
+}`}</CodeBlock>
             </div>
           </CardContent>
         </Card>

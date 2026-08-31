@@ -27,6 +27,11 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  /* 代码语义色独立于主色，保证浅色和深色背景下均可辨认。 */
+  --syntax-keyword: #8250df;
+  --syntax-string: #0a3069;
+  --syntax-number: #0550ae;
+  --syntax-property: #953800;
   --radius: 0.625rem;
   --chart-1: oklch(0.809 0.105 251.813);
   --chart-2: oklch(0.623 0.214 259.815);
@@ -63,6 +68,10 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+  --syntax-keyword: #d2a8ff;
+  --syntax-string: #a5d6ff;
+  --syntax-number: #79c0ff;
+  --syntax-property: #ffa657;
   --chart-1: oklch(0.809 0.105 251.813);
   --chart-2: oklch(0.623 0.214 259.815);
   --chart-3: oklch(0.546 0.245 262.881);
@@ -76,6 +85,27 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* 仅作用于代码框，不改变页面内联代码及原有间距。 */
+.syntax-highlight .hljs-keyword,
+.syntax-highlight .hljs-built_in,
+.syntax-highlight .hljs-literal {
+  color: var(--syntax-keyword);
+}
+.syntax-highlight .hljs-string {
+  color: var(--syntax-string);
+}
+.syntax-highlight .hljs-number,
+.syntax-highlight .hljs-variable {
+  color: var(--syntax-number);
+}
+.syntax-highlight .hljs-attr {
+  color: var(--syntax-property);
+}
+.syntax-highlight .hljs-comment,
+.syntax-highlight .hljs-punctuation {
+  color: var(--muted-foreground);
 }
 
 /* ===== Tailwind v4 主题映射 ===== */

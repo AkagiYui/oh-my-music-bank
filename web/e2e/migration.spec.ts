@@ -107,7 +107,8 @@ test('哔哩哔哩分 P 切换和批量选中提交正确任务', async ({ page 
     ]);
   await page.getByRole('button', { name: /测试视频.*测试 UP/ }).click();
   await expect(page.locator('audio')).toHaveAttribute('src', '/test-audio-1.wav');
-  await page.getByRole('combobox').first().selectOption('2');
+  await page.getByRole('combobox', { name: '视频分 P' }).click();
+  await page.getByRole('option', { name: 'P2 第二段 (3:00)' }).click();
   await expect(page.locator('audio')).toHaveAttribute('src', '/test-audio-2.wav');
   await page.getByRole('button', { name: '加入此片段' }).click();
   await expect
