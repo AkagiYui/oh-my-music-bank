@@ -1,3 +1,5 @@
+import { Pagination } from '../components/Pagination';
+import { TrackFilters } from '../components/TrackFilters';
 /** 路由 `/search` —— 用 API Key 试搜音乐并播放。 */
 import { For, Show, createSignal } from 'solid-js';
 import { createFileRoute } from '@tanstack/solid-router';
@@ -18,12 +20,19 @@ const KEY_STORAGE = 'ommb.tryKey';
 function SearchPage() {
   const [apiKey, setApiKey] = createSignal(localStorage.getItem(KEY_STORAGE) ?? '');
   const [q, setQ] = createSignal('');
+  const [filters, setFilters] = createSignal<Record<string, string>>({});
+  const [page, setPage] = createSignal(1);
+  const [total, setTotal] = createSignal(0);
+  let searchRequest = 0,
+    detailRequest = 0;
   const [results, setResults] = createSignal<TrackDTO[]>([]);
   const [selected, setSelected] = createSignal<TrackDTO | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal('');
 
-  async function doSearch(e?: Event) {
+  async function doSearch(e?: Event, nextPage = 1) {
+    const token = ++searchRequest;
+    ++detailRequest;
     e?.preventDefault();
     setError('');
     setSelected(null);
@@ -32,26 +41,33 @@ function SearchPage() {
       setError('请先填写 API Key（可在控制台创建）');
       return;
     }
-    if (!q().trim()) return;
+    if (!q().trim() && !Object.values(filters()).some(Boolean)) return;
     localStorage.setItem(KEY_STORAGE, key);
     setLoading(true);
     try {
-      const res = await api.open.search(key, q().trim());
+      const res = await api.open.search(key, q().trim(), nextPage, filters());
+      if (token !== searchRequest) return;
+      setPage(nextPage);
+      setTotal(res.total);
       setResults(res.data);
       if (res.data.length === 0) setError('没有找到相关曲目');
     } catch (err) {
+      if (token !== searchRequest) return;
       setError(err instanceof ApiError ? `${err.status} ${err.message}` : String(err));
       setResults([]);
     } finally {
-      setLoading(false);
+      if (token === searchRequest) setLoading(false);
     }
   }
 
   async function openDetail(t: TrackDTO) {
+    const token = ++detailRequest;
     setError('');
     try {
-      setSelected(await api.open.getTrack(apiKey().trim(), t.id));
+      const detail = await api.open.getTrack(apiKey().trim(), t.id);
+      if (token === detailRequest) setSelected(detail);
     } catch (err) {
+      if (token !== detailRequest) return;
       setError(err instanceof ApiError ? err.message : String(err));
     }
   }
@@ -77,14 +93,21 @@ function SearchPage() {
               onInput={(e) => setApiKey(e.currentTarget.value)}
             />
           </div>
+          <TrackFilters value={filters()} onChange={setFilters} />
           <form class="flex gap-2" onSubmit={doSearch}>
-            <Input placeholder="输入歌名 / 别名，如 告白气球" value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
+            <Input
+              placeholder="输入歌名 / 别名，如 告白气球"
+              value={q()}
+              onInput={(e) => setQ(e.currentTarget.value)}
+            />
             <Button type="submit" disabled={loading()}>
               {loading() ? '搜索中…' : '搜索'}
             </Button>
           </form>
           <Show when={error()}>
-            <p class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">{error()}</p>
+            <p class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
+              {error()}
+            </p>
           </Show>
         </CardContent>
       </Card>
@@ -98,10 +121,7 @@ function SearchPage() {
                 class="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-accent"
                 onClick={() => openDetail(t)}
               >
-                <Show
-                  when={t.coverUrl}
-                  fallback={<div class="size-10 shrink-0 rounded bg-muted" />}
-                >
+                <Show when={t.coverUrl} fallback={<div class="size-10 shrink-0 rounded bg-muted" />}>
                   <img src={t.coverUrl} alt="" class="size-10 shrink-0 rounded object-cover" />
                 </Show>
                 <div class="min-w-0 flex-1">
@@ -115,6 +135,13 @@ function SearchPage() {
         </div>
       </Show>
 
+      <Pagination
+        page={page()}
+        total={total()}
+        pageSize={20}
+        loading={loading()}
+        onPage={(p) => doSearch(undefined, p)}
+      />
       <Show when={selected()}>
         {(t) => (
           <Card>
@@ -132,7 +159,10 @@ function SearchPage() {
                 </div>
               </div>
 
-              <Show when={(t().audios ?? []).length > 0} fallback={<p class="text-sm text-muted-foreground">暂无可播放音频。</p>}>
+              <Show
+                when={(t().audios ?? []).length > 0}
+                fallback={<p class="text-sm text-muted-foreground">暂无可播放音频。</p>}
+              >
                 <AudioPlayer
                   sources={(t().audios ?? []).map((au) => ({
                     id: au.id,

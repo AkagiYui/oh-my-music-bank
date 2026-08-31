@@ -1,13 +1,14 @@
 package handler
 
 import (
-	"context"
+	"github.com/akagiyui/oh-my-music-bank/internal/service/objectgc"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/akagiyui/oh-my-music-bank/internal/model"
 	"github.com/akagiyui/oh-my-music-bank/internal/storage/objectstore"
@@ -28,53 +29,17 @@ func NewTrackHandler(db *gorm.DB, store *objectstore.Store) *TrackHandler {
 
 // List 列出曲目（管理员，含不可用曲目，可按关键词过滤）。
 func (h *TrackHandler) List(c *gin.Context) {
-	page, pageSize, offset := parsePagination(c)
-	query := h.db.Model(&model.Track{})
-	if q := strings.TrimSpace(c.Query("q")); q != "" {
-		query = query.Where("title ILIKE ?", "%"+q+"%")
-	}
-
-	var total int64
-	query.Count(&total)
-
-	var tracks []model.Track
-	if err := query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&tracks).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to list tracks"))
-		return
-	}
-
-	ids := make([]int64, len(tracks))
-	for i, t := range tracks {
-		ids[i] = t.ID
-	}
-	artistMap := loadArtistsForTracks(h.db, ids)
-
-	out := make([]TrackDTO, 0, len(tracks))
-	for i := range tracks {
-		t := tracks[i]
-		dto := TrackDTO{
-			ID: itoa(t.ID), Title: t.Title, Duration: t.Duration,
-			Available: t.Available, Aliases: []string{}, Artists: artistMap[t.ID],
-		}
-		if dto.Artists == nil {
-			dto.Artists = []ArtistDTO{}
-		}
-		if t.CoverKey != nil {
-			dto.CoverURL = h.store.PublicURL(*t.CoverKey)
-		}
-		out = append(out, dto)
-	}
-	response.Paginated(c, out, total, page, pageSize)
+	c.Set("admin_search", true)
+	(&PublicHandler{db: h.db, store: h.store}).Search(c)
 }
 
-// Detail 返回曲目详情（含音频与原始音频）。
 func (h *TrackHandler) Detail(c *gin.Context) {
 	t, ok := h.find(c)
 	if !ok {
 		return
 	}
-	dto := buildTrackDTO(h.db, h.store, t, true)
-	dto.Origins = buildOrigins(h.db, h.store, t.ID)
+	dto := buildTrackDTO(c, h.db, h.store, t, true)
+	dto.Origins = buildOrigins(c, h.db, h.store, t.ID)
 
 	var aliasRows []model.TrackAlias
 	h.db.Where("track_id = ?", t.ID).Order("alias ASC").Find(&aliasRows)
@@ -104,9 +69,17 @@ func (h *TrackHandler) Update(c *gin.Context) {
 	}
 	updates := map[string]any{}
 	if req.Title != nil {
+		if strings.TrimSpace(*req.Title) == "" {
+			c.JSON(400, pkgerrors.BadRequest("标题不能为空"))
+			return
+		}
 		updates["title"] = *req.Title
 	}
 	if req.Duration != nil {
+		if *req.Duration < 0 {
+			c.JSON(400, pkgerrors.BadRequest("时长不能为负数"))
+			return
+		}
 		updates["duration"] = *req.Duration
 	}
 	if req.Available != nil {
@@ -138,40 +111,43 @@ func (h *TrackHandler) Delete(c *gin.Context) {
 	if !ok {
 		return
 	}
-
-	// 收集待清理的对象 key。
-	var keysToRemove []string
-	var audios []model.Audio
-	h.db.Where("track_id = ?", id).Find(&audios)
-	for _, a := range audios {
-		keysToRemove = append(keysToRemove, a.FileKey)
-	}
-	var origins []model.OriginAudio
-	h.db.Where("track_id = ?", id).Find(&origins)
-	for _, o := range origins {
-		keysToRemove = append(keysToRemove, o.FileKey)
-	}
-	var t model.Track
-	if err := h.db.Where("id = ?", id).First(&t).Error; err == nil && t.CoverKey != nil {
-		keysToRemove = append(keysToRemove, *t.CoverKey)
-	}
-
-	if err := h.db.Where("id = ?", id).Delete(&model.Track{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to delete track"))
+	err := h.db.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		var track model.Track
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&track, id).Error; err != nil {
+			return err
+		}
+		var audio []model.Audio
+		var origins []model.OriginAudio
+		if err := tx.Where("track_id = ?", id).Find(&audio).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("track_id = ?", id).Find(&origins).Error; err != nil {
+			return err
+		}
+		keys := []string{}
+		for _, a := range audio {
+			keys = append(keys, a.FileKey)
+		}
+		for _, a := range origins {
+			keys = append(keys, a.FileKey)
+		}
+		if track.CoverKey != nil {
+			keys = append(keys, *track.CoverKey)
+		}
+		for _, k := range keys {
+			if err := objectgc.Schedule(tx, k, 0); err != nil {
+				return err
+			}
+		}
+		return tx.Delete(&track).Error
+	})
+	if err != nil {
+		c.JSON(422, pkgerrors.BadRequest("删除失败: "+err.Error()))
 		return
 	}
-
-	// 对象存储清理为 best-effort，失败不影响删除结果。
-	go func(ks []string) {
-		for _, k := range ks {
-			_ = h.store.Remove(context.Background(), k)
-		}
-	}(keysToRemove)
-
 	response.NoContent(c)
 }
 
-// AddAlias 为曲目添加别名。
 func (h *TrackHandler) AddAlias(c *gin.Context) {
 	id, ok := parseTrackID(c)
 	if !ok {
@@ -227,7 +203,7 @@ func (h *TrackHandler) SetArtists(c *gin.Context) {
 		for i, sid := range req.ArtistIDs {
 			aid, err := strconv.ParseInt(sid, 10, 64)
 			if err != nil {
-				continue
+				return err
 			}
 			if err := tx.Create(&model.TrackArtist{TrackID: id, ArtistID: aid, Position: i}).Error; err != nil {
 				return err
@@ -262,7 +238,7 @@ func (h *TrackHandler) SetAlbums(c *gin.Context) {
 		for _, sid := range req.AlbumIDs {
 			aid, err := strconv.ParseInt(sid, 10, 64)
 			if err != nil {
-				continue
+				return err
 			}
 			if err := tx.Create(&model.TrackAlbum{TrackID: id, AlbumID: aid}).Error; err != nil {
 				return err

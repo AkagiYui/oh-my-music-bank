@@ -17,6 +17,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/akagiyui/oh-my-music-bank/internal/config"
+	"github.com/akagiyui/oh-my-music-bank/internal/handler"
 	"github.com/akagiyui/oh-my-music-bank/internal/router"
 	"github.com/akagiyui/oh-my-music-bank/internal/service/bilibili"
 	"github.com/akagiyui/oh-my-music-bank/internal/service/cache"
@@ -50,12 +51,16 @@ func main() {
 		log.Fatalf("初始化对象存储失败: %v", err)
 	}
 
+	biliClient := bilibili.New()
+	jobs := handler.NewJobs(dbConn, store, handler.NewBilibiliHandler(dbConn, store, cacheMgr, biliClient), int64(cfg.Upload.MaxSizeMB)<<20)
+	jobs.Start()
 	engine := router.Setup(router.SetupDeps{
 		DB:     dbConn,
 		Config: cfg,
 		Cache:  cacheMgr,
 		Store:  store,
-		Bili:   bilibili.New(),
+		Bili:   biliClient,
+		Jobs:   jobs,
 	})
 
 	engine.GET("/health", func(c *gin.Context) {
@@ -72,7 +77,7 @@ func main() {
 		log.Fatalf("监听失败: %v", err)
 	}
 
-	srv := &http.Server{Handler: engine}
+	srv := &http.Server{Handler: engine, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 10 * time.Minute, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 1 << 20}
 	go func() {
 		log.Printf("服务已启动: %s", listenAddr)
 		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
@@ -89,6 +94,7 @@ func main() {
 	defer cancel()
 
 	cacheMgr.Stop()
+	jobs.Stop()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("强制关闭: %v", err)
 	}

@@ -18,6 +18,20 @@ function IntegrationsPage() {
   const [appId, setAppId] = createSignal('');
   const [apiKey, setApiKey] = createSignal('');
   const [saved, setSaved] = createSignal(false);
+  const [testing, setTesting] = createSignal(false);
+  const [testMessage, setTestMessage] = createSignal('');
+  async function test(provider: string) {
+    setTesting(true);
+    setTestMessage('');
+    try {
+      const r = await api.admin.integrations.test(provider);
+      setTestMessage(r.message);
+    } catch (e) {
+      setTestMessage(String(e));
+    } finally {
+      setTesting(false);
+    }
+  }
 
   createEffect(() => {
     const c = cfg();
@@ -25,7 +39,11 @@ function IntegrationsPage() {
   });
 
   async function save() {
-    const body: { bilibiliCookie?: string; xfyunAppId?: string; xfyunApiKey?: string } = { xfyunAppId: appId().trim() };
+    const body: {
+      bilibiliCookie?: string;
+      xfyunAppId?: string;
+      xfyunApiKey?: string;
+    } = { xfyunAppId: appId().trim() };
     if (cookie().trim()) body.bilibiliCookie = cookie().trim();
     if (apiKey().trim()) body.xfyunApiKey = apiKey().trim();
     await api.admin.integrations.update(body);
@@ -52,7 +70,13 @@ function IntegrationsPage() {
         </CardHeader>
         <CardContent class="space-y-2">
           <Label for="cookie">Cookie（留空则不修改）</Label>
-          <Textarea id="cookie" rows={3} placeholder="SESSDATA=xxx; bili_jct=xxx; ..." value={cookie()} onInput={(e) => setCookie(e.currentTarget.value)} />
+          <Textarea
+            id="cookie"
+            rows={3}
+            placeholder="SESSDATA=xxx; bili_jct=xxx; ..."
+            value={cookie()}
+            onInput={(e) => setCookie(e.currentTarget.value)}
+          />
         </CardContent>
       </Card>
 
@@ -84,6 +108,44 @@ function IntegrationsPage() {
           <span class="text-sm text-green-600">已保存</span>
         </Show>
       </div>
+      <div class="flex flex-wrap gap-2">
+        <Button variant="outline" disabled={testing()} onClick={() => test('bilibili')}>
+          测试 B 站连接
+        </Button>
+        <Button variant="outline" disabled={testing()} onClick={() => test('xfyun')}>
+          发送讯飞测试请求
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={async () => {
+            if (confirm('清除 B 站 Cookie？')) {
+              await api.admin.integrations.update({ bilibiliCookie: '' });
+              refetch();
+            }
+          }}
+        >
+          清除 B 站凭据
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={async () => {
+            if (confirm('清除讯飞凭据？')) {
+              await api.admin.integrations.update({
+                xfyunAppId: '',
+                xfyunApiKey: '',
+              });
+              refetch();
+            }
+          }}
+        >
+          清除讯飞凭据
+        </Button>
+      </div>
+      <Show when={testMessage()}>
+        <p role="status" class="text-sm">
+          {testMessage()}
+        </p>
+      </Show>
     </div>
   );
 }

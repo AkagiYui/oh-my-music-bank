@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
-	"time"
+
+	"github.com/akagiyui/oh-my-music-bank/internal/middleware"
+	"github.com/akagiyui/oh-my-music-bank/internal/service/session"
 
 	"github.com/gin-gonic/gin"
-	jwt "github.com/golang-jwt/jwt/v5"
+
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
@@ -28,11 +31,6 @@ func NewAuthHandler(db *gorm.DB, cfg config.Auth, c *cache.Manager) *AuthHandler
 	return &AuthHandler{db: db, cfg: cfg, cache: c}
 }
 
-type jwtClaims struct {
-	UserID string `json:"user_id"`
-	jwt.RegisteredClaims
-}
-
 type userResponse struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
@@ -52,53 +50,14 @@ func toUserResponse(u *model.User) userResponse {
 
 // generateTokens 生成访问令牌与刷新令牌。
 func (h *AuthHandler) generateTokens(u *model.User) (string, string, error) {
-	accessTTL, err := h.cfg.AccessTokenDuration()
-	if err != nil {
-		return "", "", err
-	}
-	refreshTTL, err := h.cfg.RefreshTokenDuration()
-	if err != nil {
-		return "", "", err
-	}
-	now := time.Now()
-	mk := func(ttl time.Duration) (string, error) {
-		claims := jwtClaims{
-			UserID: u.ID,
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
-				IssuedAt:  jwt.NewNumericDate(now),
-			},
-		}
-		return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(h.cfg.JWTSecret))
-	}
-	access, err := mk(accessTTL)
-	if err != nil {
-		return "", "", err
-	}
-	refresh, err := mk(refreshTTL)
-	if err != nil {
-		return "", "", err
-	}
-	return access, refresh, nil
+	return session.New(h.db, h.cfg, u)
 }
 
-// Register 注册新用户；首个用户自动成为管理员。
 func (h *AuthHandler) Register(c *gin.Context) {
-	var count int64
-	if err := h.db.Model(&model.User{}).Count(&count).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to check user count"))
-		return
-	}
-	// 首个用户始终允许注册（初始化管理员），其后遵循站点注册开关。
-	if count > 0 && h.cache.GetSettingDefault("site.registration_enabled", "true") == "false" {
-		c.JSON(http.StatusForbidden, pkgerrors.Forbidden("registration is disabled"))
-		return
-	}
-
 	var req struct {
 		Username string `json:"username" binding:"required,min=3,max=64"`
 		Email    string `json:"email"    binding:"required,email"`
-		Password string `json:"password" binding:"required,min=8"`
+		Password string `json:"password" binding:"required,min=8,max=72"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest(err.Error()))
@@ -117,19 +76,35 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	role := "user"
-	if count == 0 {
-		role = "admin"
+	user := model.User{Username: req.Username, Email: req.Email, PasswordHash: string(hash), Role: "user", IsActive: true}
+	err = h.db.Transaction(func(tx *gorm.DB) error {
+		// 首位管理员选举与管理员降级共用事务锁，跨实例也只允许一个初始化者。
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(91120002)").Error; err != nil {
+			return err
+		}
+		var count int64
+		if err := tx.Model(&model.User{}).Count(&count).Error; err != nil {
+			return err
+		}
+		if count == 0 {
+			user.Role = "admin"
+		} else {
+			var setting model.Setting
+			if err := tx.Where("key = ?", "site.registration_enabled").First(&setting).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			if setting.Value == "false" {
+				return errRegistrationDisabled
+			}
+		}
+		return tx.Create(&user).Error
+	})
+	if errors.Is(err, errRegistrationDisabled) {
+		c.JSON(http.StatusForbidden, pkgerrors.Forbidden("registration is disabled"))
+		return
 	}
-	user := model.User{
-		Username:     req.Username,
-		Email:        req.Email,
-		PasswordHash: string(hash),
-		Role:         role,
-		IsActive:     true,
-	}
-	if err := h.db.Create(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to create user"))
+	if err != nil {
+		c.JSON(http.StatusConflict, pkgerrors.Conflict("创建失败，用户名或邮箱可能已存在"))
 		return
 	}
 
@@ -180,30 +155,12 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	token, err := jwt.ParseWithClaims(req.RefreshToken, &jwtClaims{}, func(_ *jwt.Token) (any, error) {
-		return []byte(h.cfg.JWTSecret), nil
-	})
-	if err != nil || !token.Valid {
+	access, refresh, err := session.Refresh(h.db, h.cfg, req.RefreshToken)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, pkgerrors.Unauthorized("invalid or expired refresh token"))
 		return
 	}
-	claims, ok := token.Claims.(*jwtClaims)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, pkgerrors.Unauthorized("invalid token claims"))
-		return
-	}
 
-	var user model.User
-	if err := h.db.Where("id = ? AND is_active = true", claims.UserID).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, pkgerrors.Unauthorized("user not found"))
-		return
-	}
-
-	access, refresh, err := h.generateTokens(&user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to generate tokens"))
-		return
-	}
 	response.Success(c, gin.H{"accessToken": access, "refreshToken": refresh})
 }
 
@@ -215,4 +172,14 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		return
 	}
 	response.Success(c, toUserResponse(v.(*model.User)))
+}
+
+var errRegistrationDisabled = errors.New("registration disabled")
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+	if err := h.db.Where("id = ? AND user_id = ?", c.GetString("session_id"), c.GetString(middleware.CtxUserID)).Delete(&model.AuthSession{}).Error; err != nil {
+		c.JSON(500, pkgerrors.Internal("退出失败"))
+		return
+	}
+	response.NoContent(c)
 }

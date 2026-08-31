@@ -4,7 +4,7 @@
  * 响度均衡：以 -14 LUFS 为参考，把「比参考更响」的曲目通过音量衰减拉到一致水平
  * （仅衰减，不增益——增益需 Web Audio + 跨域 CORS，留待服务端转码时做）。
  */
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
 import { cn, formatDuration } from '../lib/utils';
 
 export interface PlayerSource {
@@ -30,6 +30,31 @@ export function AudioPlayer(props: { sources: PlayerSource[]; title?: string }) 
   const [idx, setIdx] = createSignal(0);
   const [playing, setPlaying] = createSignal(false);
   const [loading, setLoading] = createSignal(false);
+  const [error, setError] = createSignal('');
+  let sourceIdentity = '';
+  createEffect(() => {
+    const sources = props.sources;
+    const identity = sources[0]?.id ?? sources[0]?.url ?? '';
+    const changed = identity !== sourceIdentity;
+    sourceIdentity = identity;
+    untrack(() => {
+      if (!audio) return;
+      if (changed) {
+        setIdx(0);
+        setCur(0);
+        setDur(0);
+        setPlaying(false);
+      }
+      const next = sources[Math.min(idx(), Math.max(0, sources.length - 1))]?.url ?? '';
+      if (audio.getAttribute('src') !== next) {
+        audio.pause();
+        audio.src = next;
+        audio.load();
+        setLoading(false);
+        setError('');
+      }
+    });
+  });
   const [cur, setCur] = createSignal(0);
   const [dur, setDur] = createSignal(0);
   const [vol, setVol] = createSignal(1);
@@ -57,6 +82,12 @@ export function AudioPlayer(props: { sources: PlayerSource[]; title?: string }) 
     const onWaiting = () => setLoading(true);
     const onPlaying = () => setLoading(false);
     const onEnded = () => setPlaying(false);
+    const onError = () => {
+      setLoading(false);
+      setPlaying(false);
+      setError('音频加载失败：可能已下架、凭证过期或格式不受支持，请刷新详情后重试');
+    };
+    audio.addEventListener('error', onError);
     audio.addEventListener('timeupdate', onTime);
     audio.addEventListener('loadedmetadata', onMeta);
     audio.addEventListener('durationchange', onMeta);
@@ -68,6 +99,7 @@ export function AudioPlayer(props: { sources: PlayerSource[]; title?: string }) 
     audio.addEventListener('ended', onEnded);
     onCleanup(() => {
       audio.pause();
+      audio.removeEventListener('error', onError);
       audio.removeEventListener('timeupdate', onTime);
       audio.removeEventListener('loadedmetadata', onMeta);
       audio.removeEventListener('durationchange', onMeta);
@@ -81,7 +113,11 @@ export function AudioPlayer(props: { sources: PlayerSource[]; title?: string }) 
   });
 
   function togglePlay() {
-    if (audio.paused) audio.play().catch(() => {});
+    if (audio.paused)
+      audio.play().catch(() => {
+        setLoading(false);
+        setError('无法播放音频，请检查网络或更换音质');
+      });
     else audio.pause();
   }
 
@@ -97,7 +133,11 @@ export function AudioPlayer(props: { sources: PlayerSource[]; title?: string }) 
       } catch {
         /* 忽略 */
       }
-      if (wasPlaying) audio.play().catch(() => {});
+      if (wasPlaying)
+        audio.play().catch(() => {
+          setLoading(false);
+          setError('无法播放音频，请检查网络或更换音质');
+        });
       audio.removeEventListener('loadedmetadata', restore);
     };
     audio.addEventListener('loadedmetadata', restore);
@@ -132,6 +172,11 @@ export function AudioPlayer(props: { sources: PlayerSource[]; title?: string }) 
     <div class="rounded-lg border bg-card p-3">
       {/* 播放内核：隐藏的原生 <audio>，仅供 JS 控制，UI 全部自绘 */}
       <audio ref={audio} preload="metadata" class="hidden" />
+      <Show when={error()}>
+        <p role="alert" class="mb-2 text-sm text-destructive">
+          {error()}
+        </p>
+      </Show>
 
       <Show when={props.title}>
         <div class="mb-2 truncate text-sm font-medium">{props.title}</div>
@@ -144,7 +189,14 @@ export function AudioPlayer(props: { sources: PlayerSource[]; title?: string }) 
           onClick={togglePlay}
           aria-label={playing() ? '暂停' : '播放'}
         >
-          <Show when={loading()} fallback={<Show when={playing()} fallback={<IconPlay />}><IconPause /></Show>}>
+          <Show
+            when={loading()}
+            fallback={
+              <Show when={playing()} fallback={<IconPlay />}>
+                <IconPause />
+              </Show>
+            }
+          >
             <IconSpinner />
           </Show>
         </button>
@@ -170,7 +222,12 @@ export function AudioPlayer(props: { sources: PlayerSource[]; title?: string }) 
         </div>
 
         <div class="flex items-center gap-1.5">
-          <button type="button" class="text-muted-foreground hover:text-foreground" onClick={() => setMuted(!muted())} aria-label="静音">
+          <button
+            type="button"
+            class="text-muted-foreground hover:text-foreground"
+            onClick={() => setMuted(!muted())}
+            aria-label="静音"
+          >
             <Show when={muted() || vol() === 0} fallback={<IconVolume />}>
               <IconMute />
             </Show>
@@ -212,7 +269,10 @@ export function AudioPlayer(props: { sources: PlayerSource[]; title?: string }) 
           <Show when={hasLoudness()}>
             <button
               type="button"
-              class={cn('ml-auto rounded px-2 py-0.5', normalize() ? 'bg-primary/10 text-primary' : 'bg-secondary text-muted-foreground')}
+              class={cn(
+                'ml-auto rounded px-2 py-0.5',
+                normalize() ? 'bg-primary/10 text-primary' : 'bg-secondary text-muted-foreground',
+              )}
               onClick={() => {
                 const v = !normalize();
                 setNormalize(v);

@@ -1,8 +1,9 @@
+import { Pagination } from '../components/Pagination';
 /** 路由 `/dashboard` —— 用户控制台：管理自己的 API Key。 */
 import { For, Show, createEffect, createResource, createSignal } from 'solid-js';
 import { createFileRoute, useNavigate } from '@tanstack/solid-router';
 import { api, ApiError } from '../lib/api';
-import { isAuthenticated, ready, user } from '../stores/auth';
+import { isAuthenticated, ready, user, loadSession } from '../stores/auth';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -17,11 +18,17 @@ function Dashboard() {
     if (ready() && !isAuthenticated()) navigate({ to: '/login' });
   });
 
-  const [keys, { refetch }] = createResource(() => api.apiKeys.list().then((r) => r.data));
+  const [page, setPage] = createSignal(1);
+  const [paged, { refetch }] = createResource(page, (p) => api.apiKeys.list(p));
+  const keys = () => paged()?.data;
   const [name, setName] = createSignal('');
   const [created, setCreated] = createSignal<string | null>(null);
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
+  const [email, setEmail] = createSignal('');
+  const [currentPassword, setCurrentPassword] = createSignal('');
+  const [newPassword, setNewPassword] = createSignal('');
+  const [profileMessage, setProfileMessage] = createSignal('');
 
   async function create(e: Event) {
     e.preventDefault();
@@ -83,7 +90,10 @@ function Dashboard() {
           <CardTitle>我的 API Key</CardTitle>
         </CardHeader>
         <CardContent>
-          <Show when={(keys() ?? []).length > 0} fallback={<p class="text-sm text-muted-foreground">还没有 API Key。</p>}>
+          <Show
+            when={(keys() ?? []).length > 0}
+            fallback={<p class="text-sm text-muted-foreground">还没有 API Key。</p>}
+          >
             <div class="divide-y rounded-md border">
               <For each={keys()}>
                 {(k) => (
@@ -112,6 +122,70 @@ function Dashboard() {
                 )}
               </For>
             </div>
+          </Show>
+          <Pagination
+            page={page()}
+            total={paged()?.total ?? 0}
+            pageSize={20}
+            loading={paged.loading}
+            onPage={setPage}
+          />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>账号设置</CardTitle>
+        </CardHeader>
+        <CardContent class="space-y-3">
+          <form
+            class="flex gap-2"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              await api.profile.email(email());
+              loadSession();
+              setProfileMessage('邮箱已更新');
+            }}
+          >
+            <Input
+              type="email"
+              required
+              placeholder={user()?.email ?? '新邮箱'}
+              value={email()}
+              onInput={(e) => setEmail(e.currentTarget.value)}
+            />
+            <Button>修改邮箱</Button>
+          </form>
+          <form
+            class="flex flex-wrap gap-2"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              await api.profile.password(currentPassword(), newPassword());
+              window.dispatchEvent(new Event('ommb:session-expired'));
+              navigate({ to: '/login' });
+            }}
+          >
+            <Input
+              type="password"
+              required
+              autocomplete="current-password"
+              placeholder="当前密码"
+              value={currentPassword()}
+              onInput={(e) => setCurrentPassword(e.currentTarget.value)}
+            />
+            <Input
+              type="password"
+              required
+              minlength={8}
+              maxlength={72}
+              autocomplete="new-password"
+              placeholder="新密码（修改后所有会话退出）"
+              value={newPassword()}
+              onInput={(e) => setNewPassword(e.currentTarget.value)}
+            />
+            <Button>修改密码</Button>
+          </form>
+          <Show when={profileMessage()}>
+            <p role="status">{profileMessage()}</p>
           </Show>
         </CardContent>
       </Card>

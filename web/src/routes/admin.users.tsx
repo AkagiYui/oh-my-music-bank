@@ -1,5 +1,6 @@
+import { Pagination } from '../components/Pagination';
 /** 路由 `/admin/users` —— 用户管理。 */
-import { For, Show, createResource } from 'solid-js';
+import { For, Show, createSignal, createResource } from 'solid-js';
 import { createFileRoute } from '@tanstack/solid-router';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -10,7 +11,9 @@ export const Route = createFileRoute('/admin/users')({
 });
 
 function UsersPage() {
-  const [users, { refetch }] = createResource(() => api.admin.users.list().then((r) => r.data));
+  const [page, setPage] = createSignal(1);
+  const [paged, { refetch }] = createResource(page, (p) => api.admin.users.list(p));
+  const users = () => paged()?.data;
 
   return (
     <div class="space-y-4">
@@ -35,7 +38,11 @@ function UsersPage() {
                         <option value="user">user</option>
                         <option value="admin">admin</option>
                       </select>
-                      <Button size="sm" variant="ghost" onClick={() => api.admin.users.toggleActive(u.id, !u.isActive).then(refetch)}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => api.admin.users.toggleActive(u.id, !u.isActive).then(refetch)}
+                      >
                         {u.isActive ? '禁用' : '启用'}
                       </Button>
                       <Button
@@ -51,6 +58,13 @@ function UsersPage() {
               </For>
             </div>
           </Show>
+          <Pagination
+            page={page()}
+            total={paged()?.total ?? 0}
+            pageSize={50}
+            loading={paged.loading}
+            onPage={setPage}
+          />
         </CardContent>
       </Card>
     </div>

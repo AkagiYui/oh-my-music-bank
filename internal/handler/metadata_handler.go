@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"errors"
+	"fmt"
+	"github.com/akagiyui/oh-my-music-bank/internal/service/objectgc"
+	"gorm.io/gorm/clause"
 	"net/http"
 	"strings"
 
@@ -69,64 +73,104 @@ func (h *MetadataHandler) Enrich(c *gin.Context) {
 		return
 	}
 
-	updates := map[string]any{}
-	if req.Title != nil {
-		updates["title"] = *req.Title
+	// 先验证目标，再下载封面；关系和基础字段在一个事务中提交。
+	var original model.Track
+	if err := h.db.First(&original, id).Error; err != nil {
+		c.JSON(404, pkgerrors.NotFound("track not found"))
+		return
 	}
-	if req.Lyric != nil {
-		updates["lyric"] = *req.Lyric
+	coverKey := ""
+	if req.CoverURL != nil && strings.TrimSpace(*req.CoverURL) != "" {
+		var err error
+		coverKey, err = downloadCover(c.Request.Context(), h.db, h.store, *req.CoverURL)
+		if err != nil {
+			c.JSON(422, pkgerrors.BadRequest(err.Error()))
+			return
+		}
 	}
-	if req.LRCLyric != nil {
-		updates["lrc_lyric"] = *req.LRCLyric
-	}
-	if len(updates) > 0 {
-		h.db.Model(&model.Track{}).Where("id = ?", id).Updates(updates)
-	}
-
-	// 艺术家：按名称去重创建并替换关联。
-	if len(req.Artists) > 0 {
-		h.db.Transaction(func(tx *gorm.DB) error {
-			tx.Where("track_id = ?", id).Delete(&model.TrackArtist{})
+	err := h.db.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		var track model.Track
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&track, id).Error; err != nil {
+			return err
+		}
+		updates := map[string]any{}
+		if req.Title != nil {
+			if strings.TrimSpace(*req.Title) == "" {
+				return fmt.Errorf("标题不能为空")
+			}
+			updates["title"] = strings.TrimSpace(*req.Title)
+		}
+		if req.Lyric != nil {
+			updates["lyric"] = *req.Lyric
+		}
+		if req.LRCLyric != nil {
+			updates["lrc_lyric"] = *req.LRCLyric
+		}
+		if req.CoverURL != nil {
+			updates["cover_key"] = coverKey
+			if track.CoverKey != nil {
+				if err := objectgc.Schedule(tx, *track.CoverKey, 0); err != nil {
+					return err
+				}
+			}
+		}
+		if len(updates) > 0 {
+			if err := tx.Model(&track).Updates(updates).Error; err != nil {
+				return err
+			}
+		}
+		if req.Artists != nil {
+			if err := tx.Where("track_id = ?", id).Delete(&model.TrackArtist{}).Error; err != nil {
+				return err
+			}
+			seen := map[string]bool{}
 			for i, name := range req.Artists {
 				name = strings.TrimSpace(name)
-				if name == "" {
+				if name == "" || seen[name] {
 					continue
 				}
+				seen[name] = true
 				artist, err := upsertArtist(tx, name)
 				if err != nil {
 					return err
 				}
-				tx.Create(&model.TrackArtist{TrackID: id, ArtistID: artist.ID, Position: i})
+				if err := tx.Create(&model.TrackArtist{TrackID: id, ArtistID: artist.ID, Position: i}).Error; err != nil {
+					return err
+				}
 			}
-			return nil
-		})
-	}
-
-	// 专辑：按标题去重创建并关联。
-	if req.Album != nil && strings.TrimSpace(*req.Album) != "" {
-		var album model.Album
-		if err := h.db.Where("title = ?", *req.Album).First(&album).Error; err != nil {
-			album = model.Album{Title: *req.Album}
-			h.db.Create(&album)
 		}
-		var cnt int64
-		h.db.Model(&model.TrackAlbum{}).Where("track_id = ? AND album_id = ?", id, album.ID).Count(&cnt)
-		if cnt == 0 {
-			h.db.Create(&model.TrackAlbum{TrackID: id, AlbumID: album.ID})
+		if req.Album != nil {
+			if err := tx.Where("track_id = ?", id).Delete(&model.TrackAlbum{}).Error; err != nil {
+				return err
+			}
+			if title := strings.TrimSpace(*req.Album); title != "" {
+				if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", "album:"+title).Error; err != nil {
+					return err
+				}
+				var album model.Album
+				if err := tx.Where("title = ?", title).First(&album).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+					album.Title = title
+					if err = tx.Create(&album).Error; err != nil {
+						return err
+					}
+				} else if err != nil {
+					return err
+				}
+				if err := tx.Create(&model.TrackAlbum{TrackID: id, AlbumID: album.ID}).Error; err != nil {
+					return err
+				}
+			}
 		}
-	}
-
-	// 封面：下载到对象存储。
-	if req.CoverURL != nil && strings.TrimSpace(*req.CoverURL) != "" {
-		if key, err := downloadCover(c.Request.Context(), h.store, id, *req.CoverURL); err == nil {
-			h.db.Model(&model.Track{}).Where("id = ?", id).Update("cover_key", key)
-		}
-	}
-
-	var t model.Track
-	if err := h.db.Where("id = ?", id).First(&t).Error; err != nil {
-		c.JSON(http.StatusNotFound, pkgerrors.NotFound("track not found"))
+		return nil
+	})
+	if err != nil {
+		c.JSON(422, pkgerrors.BadRequest("补全失败，数据库修改已回滚: "+err.Error()))
 		return
 	}
-	response.Success(c, buildTrackDTO(h.db, h.store, &t, true))
+	var track model.Track
+	if err := h.db.First(&track, id).Error; err != nil {
+		c.JSON(500, pkgerrors.Internal("读取曲目失败"))
+		return
+	}
+	response.Success(c, buildTrackDTO(c, h.db, h.store, &track, true))
 }

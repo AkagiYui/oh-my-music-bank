@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/akagiyui/oh-my-music-bank/internal/service/objectgc"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -33,6 +34,8 @@ type albumListItem struct {
 }
 
 type albumTrackBrief struct {
+	TrackNo  *int   `json:"trackNo"`
+	DiscNo   *int   `json:"discNo"`
 	ID       string `json:"id"`
 	Title    string `json:"title"`
 	Duration int    `json:"duration"`
@@ -119,15 +122,17 @@ func (h *AlbumHandler) Detail(c *gin.Context) {
 	}
 
 	var tracks []struct {
+		TrackNo  *int
+		DiscNo   *int
 		ID       int64
 		Title    string
 		Duration int
 	}
-	h.db.Table("track_albums ta").Select("t.id, t.title, t.duration").
+	h.db.Table("track_albums ta").Select("t.id, t.title, t.duration, ta.track_no, ta.disc_no").
 		Joins("JOIN track t ON t.id = ta.track_id").Where("ta.album_id = ?", id).
-		Order("ta.track_no ASC NULLS LAST").Scan(&tracks)
+		Order("ta.disc_no ASC NULLS LAST, ta.track_no ASC NULLS LAST, t.id").Scan(&tracks)
 	for _, t := range tracks {
-		dto.Tracks = append(dto.Tracks, albumTrackBrief{ID: itoa(t.ID), Title: t.Title, Duration: t.Duration})
+		dto.Tracks = append(dto.Tracks, albumTrackBrief{ID: itoa(t.ID), Title: t.Title, Duration: t.Duration, TrackNo: t.TrackNo, DiscNo: t.DiscNo})
 	}
 	response.Success(c, dto)
 }
@@ -184,9 +189,20 @@ func (h *AlbumHandler) Update(c *gin.Context) {
 
 // Delete 删除专辑（级联解除关联）。
 func (h *AlbumHandler) Delete(c *gin.Context) {
-	id := c.Param("id")
-	if err := h.db.Where("id = ?", id).Delete(&model.Album{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to delete album"))
+	err := h.db.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		var item model.Album
+		if err := tx.Where("id = ?", c.Param("id")).First(&item).Error; err != nil {
+			return err
+		}
+		if item.CoverKey != nil {
+			if err := objectgc.Schedule(tx, *item.CoverKey, 0); err != nil {
+				return err
+			}
+		}
+		return tx.Delete(&item).Error
+	})
+	if err != nil {
+		c.JSON(422, pkgerrors.BadRequest("删除失败: "+err.Error()))
 		return
 	}
 	response.NoContent(c)

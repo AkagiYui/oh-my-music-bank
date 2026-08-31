@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"fmt"
+	"github.com/akagiyui/oh-my-music-bank/internal/model"
 	"io"
 	"net/http"
 	"os"
@@ -119,6 +121,14 @@ func (h *BilibiliHandler) audioURL(ctx context.Context, bvid string, cid int64) 
 		return "", err
 	}
 	h.mu.Lock()
+	for k, v := range h.urlCache {
+		if time.Since(v.at) > 100*time.Minute {
+			delete(h.urlCache, k)
+		}
+	}
+	if len(h.urlCache) >= 1000 {
+		clear(h.urlCache)
+	}
 	h.urlCache[key] = cachedURL{url: stream.URL, at: time.Now()}
 	h.mu.Unlock()
 	return stream.URL, nil
@@ -176,73 +186,75 @@ func (h *BilibiliHandler) downloadToTemp(ctx context.Context, bvid string, cid i
 }
 
 // Ingest 把（可裁剪的）视频音频加入音乐库，保留原始编码。
-func (h *BilibiliHandler) Ingest(c *gin.Context) {
-	if !h.requireCookie(c) {
-		return
-	}
-	var req struct {
-		Bvid     string  `json:"bvid" binding:"required"`
-		Cid      int64   `json:"cid" binding:"required"`
-		StartSec float64 `json:"startSec"`
-		EndSec   float64 `json:"endSec"`
-		Title    string  `json:"title"`
-		Artist   string  `json:"artist"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest(err.Error()))
-		return
-	}
-
-	info, _ := h.bili.View(c.Request.Context(), h.cookie(), req.Bvid)
-
-	srcPath, err := h.downloadToTemp(c.Request.Context(), req.Bvid, req.Cid)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, pkgerrors.New("bilibili_error", err.Error()))
-		return
-	}
-	defer os.Remove(srcPath)
-
-	ingestPath := srcPath
-	if req.StartSec > 0 || req.EndSec > req.StartSec {
-		trimmed, err := os.CreateTemp("", "ommb-trim-*.m4a")
-		if err == nil {
-			trimmed.Close()
-			if err := audioproc.Trim(srcPath, trimmed.Name(), req.StartSec, req.EndSec); err == nil {
-				ingestPath = trimmed.Name()
-				defer os.Remove(trimmed.Name())
-			} else {
-				os.Remove(trimmed.Name())
-			}
-		}
-	}
-
-	title, artist, cover := req.Title, req.Artist, ""
-	if info != nil {
-		if title == "" {
-			title = info.Title
-		}
-		if artist == "" {
-			artist = info.Owner
-		}
-		cover = info.Cover
-	}
-
-	track, dedup, err := ingestAudioFile(c.Request.Context(), h.db, h.store, ingestPath, "m4a", ingestOptions{
-		Title: title, Artist: artist, Source: "bilibili:" + req.Bvid, CoverURL: cover,
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, pkgerrors.Internal(err.Error()))
-		return
-	}
-	dto := buildTrackDTO(h.db, h.store, track, true)
-	if dedup {
-		response.Success(c, gin.H{"deduplicated": true, "track": dto})
-		return
-	}
-	response.Created(c, dto)
+type BiliIngestRequest struct {
+	Bvid     string  `json:"bvid"`
+	Cid      int64   `json:"cid"`
+	StartSec float64 `json:"startSec"`
+	EndSec   float64 `json:"endSec"`
+	Title    string  `json:"title"`
+	Artist   string  `json:"artist"`
+	TrackID  string  `json:"trackId"`
 }
 
-// Recognize 截取片段送听歌识曲，返回候选。
+func (h *BilibiliHandler) ingest(ctx context.Context, req BiliIngestRequest) (*model.Track, bool, error) {
+	if h.cookie() == "" {
+		return nil, false, fmt.Errorf("B 站 Cookie 未配置")
+	}
+	info, err := h.bili.View(ctx, h.cookie(), req.Bvid)
+	if err != nil {
+		return nil, false, err
+	}
+	duration := float64(0)
+	for _, p := range info.Pages {
+		if p.CID == req.Cid {
+			duration = float64(p.Duration)
+		}
+	}
+	if duration == 0 {
+		return nil, false, fmt.Errorf("无效的分 P")
+	}
+	if err := audioproc.ValidateSegment(req.StartSec, req.EndSec, duration); err != nil {
+		return nil, false, err
+	}
+	srcPath, err := h.downloadToTemp(ctx, req.Bvid, req.Cid)
+	if err != nil {
+		return nil, false, err
+	}
+	defer os.Remove(srcPath)
+	reportJob(ctx, h.db, "裁剪与校验片段", 20)
+	ingestPath := srcPath
+	if req.StartSec > 0 || req.EndSec > 0 {
+		f, err := os.CreateTemp("", "ommb-trim-*.m4a")
+		if err != nil {
+			return nil, false, err
+		}
+		f.Close()
+		defer os.Remove(f.Name())
+		if err := audioproc.Trim(ctx, srcPath, f.Name(), req.StartSec, req.EndSec); err != nil {
+			return nil, false, fmt.Errorf("裁剪失败，未收录整段: %w", err)
+		}
+		ingestPath = f.Name()
+	}
+	target, err := optionalTrackID(req.TrackID)
+	if err != nil {
+		return nil, false, err
+	}
+	return ingestAudioFile(ctx, h.db, h.store, ingestPath, "m4a", ingestOptions{Title: firstNonEmpty(req.Title, info.Title), Artist: firstNonEmpty(req.Artist, info.Owner), Source: fmt.Sprintf("bilibili:%s:%d:%.3f-%.3f", req.Bvid, req.Cid, req.StartSec, req.EndSec), CoverURL: info.Cover, TrackID: target})
+}
+func (h *BilibiliHandler) Ingest(c *gin.Context) {
+	var req BiliIngestRequest
+	if c.ShouldBindJSON(&req) != nil {
+		c.JSON(400, pkgerrors.BadRequest("invalid request"))
+		return
+	}
+	track, dedup, err := h.ingest(c.Request.Context(), req)
+	if err != nil {
+		c.JSON(422, pkgerrors.BadRequest(err.Error()))
+		return
+	}
+	response.Success(c, gin.H{"track": buildTrackDTO(c, h.db, h.store, track, true), "deduplicated": dedup})
+}
+
 func (h *BilibiliHandler) Recognize(c *gin.Context) {
 	if !h.requireCookie(c) {
 		return
@@ -259,6 +271,18 @@ func (h *BilibiliHandler) Recognize(c *gin.Context) {
 		return
 	}
 
+	if req.Provider != "" && req.Provider != "xfyun" {
+		c.JSON(501, pkgerrors.BadRequest("该识别服务尚未支持"))
+		return
+	}
+	if err := audioproc.ValidateSegment(req.StartSec, req.EndSec, 0); err != nil {
+		c.JSON(400, pkgerrors.BadRequest(err.Error()))
+		return
+	}
+	if h.cache.GetSetting("xfyun.app_id") == "" || h.cache.GetSetting("xfyun.api_key") == "" {
+		c.JSON(400, pkgerrors.BadRequest("请先配置讯飞识别"))
+		return
+	}
 	srcPath, err := h.downloadToTemp(c.Request.Context(), req.Bvid, req.Cid)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, pkgerrors.New("bilibili_error", err.Error()))
@@ -288,7 +312,7 @@ func (h *BilibiliHandler) Recognize(c *gin.Context) {
 		}
 		pcm.Close()
 		defer os.Remove(pcm.Name())
-		if err := audioproc.ToPCM16kMono(srcPath, pcm.Name(), req.StartSec, segLen); err != nil {
+		if err := audioproc.ToPCM16kMono(c.Request.Context(), srcPath, pcm.Name(), req.StartSec, segLen); err != nil {
 			c.JSON(http.StatusInternalServerError, pkgerrors.Internal("转码失败: "+err.Error()))
 			return
 		}

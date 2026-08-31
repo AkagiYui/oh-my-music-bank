@@ -1,3 +1,4 @@
+import { Pagination } from '../components/Pagination';
 /** 路由 `/admin/artists` —— 艺术家管理（列表、新建、编辑名称/别名）。 */
 import { For, Show, createEffect, createResource, createSignal } from 'solid-js';
 import { createFileRoute } from '@tanstack/solid-router';
@@ -13,7 +14,12 @@ export const Route = createFileRoute('/admin/artists')({
 function ArtistsPage() {
   const [q, setQ] = createSignal('');
   const [term, setTerm] = createSignal('');
-  const [list, { refetch }] = createResource(term, (t) => api.admin.artists.list(t).then((r) => r.data));
+  const [page, setPage] = createSignal(1);
+  const [paged, { refetch }] = createResource(
+    () => ({ term: term(), page: page() }),
+    (p) => api.admin.artists.list(p.term, p.page),
+  );
+  const list = () => paged()?.data;
   const [newName, setNewName] = createSignal('');
   const [editing, setEditing] = createSignal<string | null>(null);
 
@@ -40,6 +46,7 @@ function ArtistsPage() {
               class="flex flex-1 gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
+                setPage(1);
                 setTerm(q().trim());
               }}
             >
@@ -90,6 +97,13 @@ function ArtistsPage() {
               )}
             </For>
           </div>
+          <Pagination
+            page={page()}
+            total={paged()?.total ?? 0}
+            pageSize={50}
+            loading={paged.loading}
+            onPage={setPage}
+          />
         </CardContent>
       </Card>
     </div>
@@ -101,6 +115,7 @@ function ArtistEditor(props: { id: string; onRenamed: () => void }) {
   const [name, setName] = createSignal('');
   const [avatarKey, setAvatarKey] = createSignal('');
   const [aliasInput, setAliasInput] = createSignal('');
+  const [mergeTarget, setMergeTarget] = createSignal('');
 
   createEffect(() => {
     const d = detail();
@@ -111,7 +126,10 @@ function ArtistEditor(props: { id: string; onRenamed: () => void }) {
   });
 
   async function save() {
-    await api.admin.artists.update(props.id, { name: name(), avatarKey: avatarKey() });
+    await api.admin.artists.update(props.id, {
+      name: name(),
+      avatarKey: avatarKey(),
+    });
     props.onRenamed();
     refetch();
   }
@@ -149,7 +167,11 @@ function ArtistEditor(props: { id: string; onRenamed: () => void }) {
             {(al) => (
               <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
                 {al.alias}
-                <button type="button" class="text-muted-foreground hover:text-foreground" onClick={() => delAlias(al.id)}>
+                <button
+                  type="button"
+                  class="text-muted-foreground hover:text-foreground"
+                  onClick={() => delAlias(al.id)}
+                >
                   ×
                 </button>
               </span>
@@ -157,7 +179,12 @@ function ArtistEditor(props: { id: string; onRenamed: () => void }) {
           </For>
         </div>
         <div class="flex gap-2">
-          <Input class="h-9" placeholder="添加别名" value={aliasInput()} onInput={(e) => setAliasInput(e.currentTarget.value)} />
+          <Input
+            class="h-9"
+            placeholder="添加别名"
+            value={aliasInput()}
+            onInput={(e) => setAliasInput(e.currentTarget.value)}
+          />
           <Button size="sm" variant="secondary" onClick={addAlias}>
             添加
           </Button>
@@ -165,7 +192,27 @@ function ArtistEditor(props: { id: string; onRenamed: () => void }) {
       </div>
 
       <div class="text-xs text-muted-foreground">
-        关联专辑：{(detail()?.albums ?? []).map((al) => al.title).join('、') || '无'} · 曲目数 {detail()?.trackCount ?? 0}
+        关联专辑：
+        {(detail()?.albums ?? []).map((al) => al.title).join('、') || '无'} · 曲目数 {detail()?.trackCount ?? 0}
+      </div>
+      <div class="space-y-2 rounded border p-3">
+        <p class="text-sm">艺术家 ID：{props.id}。合并会转移曲目、专辑、演出和别名。</p>
+        <Input
+          placeholder="目标艺术家 ID"
+          value={mergeTarget()}
+          onInput={(e) => setMergeTarget(e.currentTarget.value)}
+        />
+        <Button
+          variant="outline"
+          disabled={!mergeTarget().trim()}
+          onClick={async () => {
+            if (!confirm('确认合并艺术家？此操作不可撤销。')) return;
+            await api.admin.artists.merge(props.id, mergeTarget().trim());
+            props.onRenamed();
+          }}
+        >
+          合并艺术家
+        </Button>
       </div>
     </div>
   );

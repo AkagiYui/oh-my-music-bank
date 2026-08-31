@@ -2,6 +2,7 @@
 package db
 
 import (
+	"context"
 	"embed"
 	"time"
 
@@ -61,10 +62,21 @@ func Migrate(db *gorm.DB) error {
 	}
 
 	// 数据库级 advisory lock，避免多实例启动时并发执行迁移。
-	if _, err := sqlDB.Exec("SELECT pg_advisory_lock(91120001)"); err != nil {
+	// 锁连接独立占用一个连接，避免单连接配置下迁移等待自身。
+	maxOpen := sqlDB.Stats().MaxOpenConnections
+	if maxOpen > 0 {
+		sqlDB.SetMaxOpenConns(maxOpen + 1)
+		defer sqlDB.SetMaxOpenConns(maxOpen)
+	}
+	conn, err := sqlDB.Conn(context.Background())
+	if err != nil {
 		return err
 	}
-	defer sqlDB.Exec("SELECT pg_advisory_unlock(91120001)")
+	defer conn.Close()
+	if _, err := conn.ExecContext(context.Background(), "SELECT pg_advisory_lock(91120001)"); err != nil {
+		return err
+	}
+	defer conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock(91120001)")
 
 	return goose.Up(sqlDB, "migrations")
 }

@@ -1,104 +1,87 @@
-/** 路由 `/admin/upload` —— 上传音频，系统自动解析并入库。 */
-import { Show, createSignal } from 'solid-js';
-import { createFileRoute } from '@tanstack/solid-router';
-import { api, ApiError, type TrackDTO } from '../lib/api';
+import { For, Show, createSignal } from 'solid-js';
+import { createFileRoute, Link } from '@tanstack/solid-router';
+import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { AudioPlayer } from '../components/AudioPlayer';
-import { formatDuration } from '../lib/utils';
-
 export const Route = createFileRoute('/admin/upload')({
   component: UploadPage,
 });
-
 function UploadPage() {
-  let fileInput!: HTMLInputElement;
-  const [file, setFile] = createSignal<File | null>(null);
+  const [files, setFiles] = createSignal<File[]>([]);
   const [title, setTitle] = createSignal('');
   const [artist, setArtist] = createSignal('');
-  const [result, setResult] = createSignal<TrackDTO | null>(null);
-  const [error, setError] = createSignal('');
+  const [target, setTarget] = createSignal('');
   const [busy, setBusy] = createSignal(false);
-
+  const [messages, setMessages] = createSignal<string[]>([]);
+  let input!: HTMLInputElement;
   async function submit(e: Event) {
     e.preventDefault();
-    if (!file()) {
-      setError('请选择音频文件');
-      return;
-    }
-    setError('');
-    setResult(null);
+    if (busy()) return;
     setBusy(true);
+    setMessages([]);
+    const failed: File[] = [];
+    // 按文件独立提交，单个失败不会阻断其余文件；失败项保留以便再次提交。
     try {
-      const t = await api.admin.audio.upload(file()!, { title: title().trim(), artist: artist().trim() });
-      setResult(t);
-      setTitle('');
-      setArtist('');
-      setFile(null);
-      if (fileInput) fileInput.value = '';
-    } catch (err) {
-      setError(err instanceof ApiError ? `${err.status} ${err.message}` : String(err));
+      for (const file of files()) {
+        try {
+          const j = await api.admin.jobs.upload(file, {
+            title: title().trim(),
+            artist: artist().trim(),
+            trackId: target().trim(),
+          });
+          setMessages((m) => [...m, `${file.name}：已进入任务 ${j.id}`]);
+        } catch (err) {
+          failed.push(file);
+          setMessages((m) => [...m, `${file.name}：${String(err)}`]);
+        }
+      }
     } finally {
+      setFiles(failed);
+      if (!failed.length) input.value = '';
       setBusy(false);
     }
   }
-
   return (
     <div class="max-w-2xl space-y-4">
-      <h1 class="text-2xl font-semibold">上传音频</h1>
-      <Card>
-        <CardHeader>
-          <CardTitle>上传</CardTitle>
-          <CardDescription>系统会自动解析标题、艺术家、时长与音频参数；留空则用文件标签。相同文件会自动去重。</CardDescription>
-        </CardHeader>
-        <CardContent class="space-y-4">
-          <form class="space-y-4" onSubmit={submit}>
-            <div class="space-y-1.5">
-              <Label for="file">音频文件</Label>
-              <Input id="file" ref={fileInput} type="file" accept="audio/*" onChange={(e) => setFile(e.currentTarget.files?.[0] ?? null)} />
-            </div>
-            <div class="grid gap-4 sm:grid-cols-2">
-              <div class="space-y-1.5">
-                <Label for="title">标题（可选）</Label>
-                <Input id="title" value={title()} onInput={(e) => setTitle(e.currentTarget.value)} />
-              </div>
-              <div class="space-y-1.5">
-                <Label for="artist">艺术家（可选）</Label>
-                <Input id="artist" value={artist()} onInput={(e) => setArtist(e.currentTarget.value)} />
-              </div>
-            </div>
-            <Show when={error()}>
-              <p class="text-sm text-destructive">{error()}</p>
-            </Show>
-            <Button type="submit" disabled={busy()}>
-              {busy() ? '上传解析中…' : '上传'}
-            </Button>
-          </form>
-
-          <Show when={result()}>
-            {(t) => (
-              <div class="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
-                <div class="font-medium">已收录：{t().title}</div>
-                <div class="text-sm text-muted-foreground">
-                  {t().artists.map((a) => a.name).join(' / ') || '未知艺术家'} · {formatDuration(t().duration)}
-                </div>
-                <Show when={(t().audios ?? []).length > 0}>
-                  <AudioPlayer
-                    sources={(t().audios ?? []).map((au) => ({
-                      id: au.id,
-                      label: `${au.qualityLabel} · ${Math.round(au.bitrate / 1000)}kbps`,
-                      url: au.url,
-                      loudness: au.loudness,
-                    }))}
-                  />
-                </Show>
-              </div>
-            )}
-          </Show>
-        </CardContent>
-      </Card>
+      <h1 class="text-2xl font-semibold">批量上传音频</h1>
+      <form onSubmit={submit} class="space-y-3 rounded border p-4">
+        <Input
+          ref={input}
+          type="file"
+          multiple
+          accept="audio/*,.ape,.aiff"
+          disabled={busy()}
+          onChange={(e) => setFiles(Array.from(e.currentTarget.files ?? []))}
+        />
+        <p class="text-sm">已选择 {files().length} 个文件。留空标题和艺术家时使用文件标签。</p>
+        <Input
+          placeholder="标题（可选）"
+          value={title()}
+          disabled={busy()}
+          onInput={(e) => setTitle(e.currentTarget.value)}
+        />
+        <Input
+          placeholder="艺术家（可选）"
+          value={artist()}
+          disabled={busy()}
+          onInput={(e) => setArtist(e.currentTarget.value)}
+        />
+        <Input
+          placeholder="已有曲目 ID（可选，将文件加入该曲目的来源/音质版本）"
+          value={target()}
+          disabled={busy()}
+          onInput={(e) => setTarget(e.currentTarget.value)}
+        />
+        <Button disabled={busy() || !files().length}>{busy() ? '正在上传…' : '上传并创建后台任务'}</Button>
+      </form>
+      <Show when={messages().length}>
+        <div class="space-y-1 text-sm" role="status">
+          <For each={messages()}>{(m) => <p>{m}</p>}</For>
+        </div>
+      </Show>
+      <Link to="/admin/jobs" class="text-primary underline">
+        查看处理进度、失败记录和重试
+      </Link>
     </div>
   );
 }

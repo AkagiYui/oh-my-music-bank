@@ -21,6 +21,7 @@ import { Route as AdminUploadRouteImport } from './routes/admin.upload'
 import { Route as AdminTracksRouteImport } from './routes/admin.tracks'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminLogsRouteImport } from './routes/admin.logs'
+import { Route as AdminJobsRouteImport } from './routes/admin.jobs'
 import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
 import { Route as AdminImportRouteImport } from './routes/admin.import'
 import { Route as AdminArtistsRouteImport } from './routes/admin.artists'
@@ -87,6 +88,11 @@ const AdminLogsRoute = AdminLogsRouteImport.update({
   path: '/logs',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminJobsRoute = AdminJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
   id: '/integrations',
   path: '/integrations',
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/admin/artists': typeof AdminArtistsRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/jobs': typeof AdminJobsRoute
   '/admin/logs': typeof AdminLogsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/tracks': typeof AdminTracksRoute
@@ -143,6 +150,7 @@ export interface FileRoutesByTo {
   '/admin/artists': typeof AdminArtistsRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/jobs': typeof AdminJobsRoute
   '/admin/logs': typeof AdminLogsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/tracks': typeof AdminTracksRoute
@@ -163,6 +171,7 @@ export interface FileRoutesById {
   '/admin/artists': typeof AdminArtistsRoute
   '/admin/import': typeof AdminImportRoute
   '/admin/integrations': typeof AdminIntegrationsRoute
+  '/admin/jobs': typeof AdminJobsRoute
   '/admin/logs': typeof AdminLogsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/tracks': typeof AdminTracksRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/admin/artists'
     | '/admin/import'
     | '/admin/integrations'
+    | '/admin/jobs'
     | '/admin/logs'
     | '/admin/settings'
     | '/admin/tracks'
@@ -202,6 +212,7 @@ export interface FileRouteTypes {
     | '/admin/artists'
     | '/admin/import'
     | '/admin/integrations'
+    | '/admin/jobs'
     | '/admin/logs'
     | '/admin/settings'
     | '/admin/tracks'
@@ -221,6 +232,7 @@ export interface FileRouteTypes {
     | '/admin/artists'
     | '/admin/import'
     | '/admin/integrations'
+    | '/admin/jobs'
     | '/admin/logs'
     | '/admin/settings'
     | '/admin/tracks'
@@ -324,6 +336,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AdminLogsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/jobs': {
+      id: '/admin/jobs'
+      path: '/jobs'
+      fullPath: '/admin/jobs'
+      preLoaderRoute: typeof AdminJobsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/integrations': {
       id: '/admin/integrations'
       path: '/integrations'
@@ -368,6 +387,7 @@ interface AdminRouteChildren {
   AdminArtistsRoute: typeof AdminArtistsRoute
   AdminImportRoute: typeof AdminImportRoute
   AdminIntegrationsRoute: typeof AdminIntegrationsRoute
+  AdminJobsRoute: typeof AdminJobsRoute
   AdminLogsRoute: typeof AdminLogsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminTracksRoute: typeof AdminTracksRoute
@@ -382,6 +402,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminArtistsRoute: AdminArtistsRoute,
   AdminImportRoute: AdminImportRoute,
   AdminIntegrationsRoute: AdminIntegrationsRoute,
+  AdminJobsRoute: AdminJobsRoute,
   AdminLogsRoute: AdminLogsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminTracksRoute: AdminTracksRoute,

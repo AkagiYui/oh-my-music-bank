@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/gin-gonic/gin"
 	"strconv"
 	"time"
 
@@ -37,6 +38,7 @@ type AliasRow struct {
 
 // AudioDTO 分发音频视图，含对外可访问地址。
 type AudioDTO struct {
+	Source       *string  `json:"source,omitempty"`
 	ID           string   `json:"id"`
 	QualityLabel string   `json:"qualityLabel"`
 	Format       string   `json:"format"`
@@ -113,7 +115,7 @@ func loadArtistsForTracks(db *gorm.DB, trackIDs []int64) map[int64][]ArtistDTO {
 }
 
 // buildTrackDTO 构建单个曲目的完整 DTO（别名/艺术家/专辑/语种，可选音频）。
-func buildTrackDTO(db *gorm.DB, store *objectstore.Store, t *model.Track, includeAudio bool) TrackDTO {
+func buildTrackDTO(c *gin.Context, db *gorm.DB, store *objectstore.Store, t *model.Track, includeAudio bool) TrackDTO {
 	dto := TrackDTO{
 		ID:        itoa(t.ID),
 		Title:     t.Title,
@@ -182,6 +184,7 @@ func buildTrackDTO(db *gorm.DB, store *objectstore.Store, t *model.Track, includ
 		for _, au := range audios {
 			dto.Audios = append(dto.Audios, AudioDTO{
 				ID:           itoa(au.ID),
+				Source:       au.Source,
 				QualityLabel: au.QualityLabel,
 				Format:       au.Format,
 				Bitrate:      au.Bitrate,
@@ -191,7 +194,7 @@ func buildTrackDTO(db *gorm.DB, store *objectstore.Store, t *model.Track, includ
 				Duration:     au.Duration,
 				Size:         au.Size,
 				Loudness:     au.Loudness,
-				URL:          store.PublicURL(au.FileKey),
+				URL:          mediaURL(c, "/api/v1/media/audio/"+itoa(au.ID)),
 			})
 		}
 	}
@@ -199,7 +202,7 @@ func buildTrackDTO(db *gorm.DB, store *objectstore.Store, t *model.Track, includ
 }
 
 // buildOrigins 构建某曲目的原始音频列表（管理端）。
-func buildOrigins(db *gorm.DB, store *objectstore.Store, trackID int64) []OriginDTO {
+func buildOrigins(c *gin.Context, db *gorm.DB, store *objectstore.Store, trackID int64) []OriginDTO {
 	var origins []model.OriginAudio
 	db.Where("track_id = ?", trackID).Order("created_at DESC").Find(&origins)
 	out := make([]OriginDTO, 0, len(origins))
@@ -217,7 +220,7 @@ func buildOrigins(db *gorm.DB, store *objectstore.Store, trackID int64) []Origin
 			SamplingRate: o.SamplingRate,
 			BitDepth:     o.BitDepth,
 			ChannelCount: o.ChannelCount,
-			URL:          store.PublicURL(o.FileKey),
+			URL:          mediaURL(c, "/api/v1/media/origin/"+itoa(o.ID)),
 			CreatedAt:    o.CreatedAt,
 		})
 	}

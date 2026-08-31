@@ -1,6 +1,7 @@
 package handler
 
 import (
+	pkgerrors "github.com/akagiyui/oh-my-music-bank/pkg/errors"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -50,14 +51,20 @@ func (h *LogHandler) List(c *gin.Context) {
 	}
 
 	var total int64
-	applyFilter(h.db).Count(&total)
+	if err := applyFilter(h.db).Count(&total).Error; err != nil {
+		c.JSON(500, pkgerrors.Internal("读取日志失败"))
+		return
+	}
 
 	var rows []logRow
-	applyFilter(h.db).
+	if err := applyFilter(h.db).
 		Select("l.*, u.username AS username, k.name AS key_name").
 		Order("l.created_at DESC").
 		Offset(offset).Limit(pageSize).
-		Scan(&rows)
+		Scan(&rows).Error; err != nil {
+		c.JSON(500, pkgerrors.Internal("读取日志失败"))
+		return
+	}
 
 	response.Paginated(c, rows, total, page, pageSize)
 }

@@ -19,7 +19,6 @@ export function loadSession() {
     .me()
     .then((u) => setUser(u))
     .catch(() => {
-      clearTokens();
       setUser(null);
     })
     .finally(() => setReady(true));
@@ -39,7 +38,13 @@ export async function register(username: string, email: string, password: string
   return res.user;
 }
 
-export function logout() {
+export async function logout() {
+  await api.auth.logout();
   clearTokens();
+  localStorage.removeItem('ommb.tryKey');
   setUser(null);
 }
+window.addEventListener('ommb:session-expired', () => {
+  clearTokens();
+  setUser(null);
+});

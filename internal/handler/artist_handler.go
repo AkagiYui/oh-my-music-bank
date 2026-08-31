@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/akagiyui/oh-my-music-bank/internal/service/objectgc"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -217,9 +218,20 @@ func (h *ArtistHandler) DeleteAlias(c *gin.Context) {
 
 // Delete 删除艺术家（级联解除关联）。
 func (h *ArtistHandler) Delete(c *gin.Context) {
-	id := c.Param("id")
-	if err := h.db.Where("id = ?", id).Delete(&model.Artist{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to delete artist"))
+	err := h.db.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		var item model.Artist
+		if err := tx.Where("id = ?", c.Param("id")).First(&item).Error; err != nil {
+			return err
+		}
+		if item.AvatarKey != nil {
+			if err := objectgc.Schedule(tx, *item.AvatarKey, 0); err != nil {
+				return err
+			}
+		}
+		return tx.Delete(&item).Error
+	})
+	if err != nil {
+		c.JSON(422, pkgerrors.BadRequest("删除失败: "+err.Error()))
 		return
 	}
 	response.NoContent(c)

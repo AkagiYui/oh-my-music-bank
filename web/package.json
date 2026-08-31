@@ -2,13 +2,15 @@
   "name": "oh-my-music-bank-web",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.33.1",
   "type": "module",
   "description": "Oh My Music Bank 前端 —— SolidJS 单页应用",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "@iconify-icon/solid": "^3.0.3",
@@ -23,16 +25,21 @@
   "devDependencies": {
     "@iconify-json/lucide": "^1.2.112",
     "@kobalte/tailwindcss": "^0.9.0",
+    "@solidjs/testing-library": "^0.8.10",
     "@tailwindcss/vite": "^4.1.4",
     "@tanstack/router-plugin": "^1.168.0",
     "@types/node": "^22.10.0",
+    "jsdom": "^26.1.0",
     "tailwindcss": "^4.1.4",
     "tw-animate-css": "^1.2.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
-    "vite-plugin-solid": "^2.11.12"
+    "vite-plugin-solid": "^2.11.12",
+    "vitest": "^3.2.7"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

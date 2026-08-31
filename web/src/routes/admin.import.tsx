@@ -16,6 +16,12 @@ function ImportPage() {
   const [status] = createResource(() => api.admin.bilibili.status());
   const [folders] = createResource(() => api.admin.bilibili.favorites().catch(() => []));
   const [items, setItems] = createSignal<BiliMedia[]>([]);
+  const [folderPage, setFolderPage] = createSignal(1);
+  const [hasMore, setHasMore] = createSignal(false);
+  const [selected, setSelected] = createSignal<string[]>([]);
+  const [target, setTarget] = createSignal('');
+  let folderRequest = 0;
+  let videoRequest = 0;
   const [folderId, setFolderId] = createSignal<number | null>(null);
   const [bvInput, setBvInput] = createSignal('');
 
@@ -34,26 +40,38 @@ function ImportPage() {
 
   const page = () => video()?.pages.find((p) => p.cid === cid());
   const duration = () => page()?.duration ?? 0;
-  const streamUrl = () => (video() ? api.admin.bilibili.streamUrl(video()!.bvid, cid()) : '');
+  const [streamUrl] = createResource(
+    () => (video() && cid() ? { bvid: video()!.bvid, cid: cid() } : null),
+    (p) => api.admin.bilibili.streamUrl(p.bvid, p.cid),
+  );
 
-  async function openFolder(id: number) {
+  async function openFolder(id: number, pn = 1) {
+    const token = ++folderRequest;
     setFolderId(id);
     setErr('');
     try {
-      const r = await api.admin.bilibili.favoriteItems(id);
+      const r = await api.admin.bilibili.favoriteItems(id, pn);
+      if (token !== folderRequest) return;
       setItems(r.items);
+      setFolderPage(pn);
+      setHasMore(r.hasMore);
+      setSelected([]);
     } catch (e) {
+      if (token !== folderRequest) return;
       setErr(String(e));
     }
   }
 
   async function openVideo(bvid: string) {
+    const token = ++videoRequest;
     setErr('');
     setMsg('');
     setVideo(null);
     setCands(null);
     try {
       const info = await api.admin.bilibili.resolve(bvid.trim());
+      if (token !== videoRequest) return;
+      if (!info.pages.length) throw new Error('视频没有可用分 P');
       setVideo(info);
       const p = info.pages[0];
       setCid(p.cid);
@@ -62,6 +80,7 @@ function ImportPage() {
       setTitle(info.title);
       setArtist(info.owner);
     } catch (e) {
+      if (token !== videoRequest) return;
       setErr(String(e));
     }
   }
@@ -78,7 +97,14 @@ function ImportPage() {
     setMsg('');
     setErr('');
     try {
-      const body: { bvid: string; cid: number; title: string; artist: string; startSec?: number; endSec?: number } = {
+      const body: {
+        bvid: string;
+        cid: number;
+        title: string;
+        artist: string;
+        startSec?: number;
+        endSec?: number;
+      } = {
         bvid: video()!.bvid,
         cid: cid(),
         title: title(),
@@ -88,9 +114,8 @@ function ImportPage() {
         body.startSec = start();
         body.endSec = end();
       }
-      const d = await api.admin.bilibili.ingest(body);
-      const track = d.track ?? d;
-      setMsg(`已加入：${track.title}${d.deduplicated ? '（已存在，自动去重）' : ''}`);
+      await api.admin.jobs.bilibili([{ ...body, trackId: target().trim() }]);
+      setMsg('已加入后台任务，可在收录任务中查看进度');
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -164,7 +189,11 @@ function ImportPage() {
                 if (bvInput().trim()) openVideo(bvInput());
               }}
             >
-              <Input placeholder="或直接输入 BV 号（如 BV1xx411c7mD）" value={bvInput()} onInput={(e) => setBvInput(e.currentTarget.value)} />
+              <Input
+                placeholder="或直接输入 BV 号（如 BV1xx411c7mD）"
+                value={bvInput()}
+                onInput={(e) => setBvInput(e.currentTarget.value)}
+              />
               <Button type="submit" variant="secondary">
                 打开
               </Button>
@@ -174,22 +203,82 @@ function ImportPage() {
 
         {/* 收藏夹视频列表 */}
         <Show when={items().length > 0}>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button size="sm" disabled={folderPage() <= 1} onClick={() => openFolder(folderId()!, folderPage() - 1)}>
+              上一页
+            </Button>
+            <span>第 {folderPage()} 页</span>
+            <Button size="sm" disabled={!hasMore()} onClick={() => openFolder(folderId()!, folderPage() + 1)}>
+              下一页
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setSelected(items().map((m) => m.bvid))}>
+              选择本页
+            </Button>
+            <Button
+              size="sm"
+              disabled={!selected().length || busy() !== ''}
+              onClick={async () => {
+                setBusy('batch');
+                setErr('');
+                try {
+                  const tasks: Record<string, unknown>[] = [];
+                  for (const bvid of selected()) {
+                    const info = await api.admin.bilibili.resolve(bvid);
+                    for (const p of info.pages)
+                      tasks.push({
+                        bvid,
+                        cid: p.cid,
+                        title: info.pages.length > 1 ? p.part : info.title,
+                        artist: info.owner,
+                      });
+                  }
+                  for (let i = 0; i < tasks.length; i += 50) await api.admin.jobs.bilibili(tasks.slice(i, i + 50));
+                  setSelected([]);
+                  setMsg(`已提交 ${tasks.length} 个分 P 收录任务`);
+                } catch (e) {
+                  setErr(String(e));
+                } finally {
+                  setBusy('');
+                }
+              }}
+            >
+              批量导入所选视频的全部分 P
+            </Button>
+            <Link to="/admin/jobs" class="text-primary underline">
+              查看任务
+            </Link>
+          </div>
           <div class="grid gap-2 sm:grid-cols-2">
             <For each={items()}>
               {(m) => (
-                <button
-                  type="button"
-                  class="flex items-center gap-3 rounded-md border p-2 text-left text-sm hover:bg-accent"
-                  onClick={() => openVideo(m.bvid)}
-                >
-                  <img src={m.cover} alt="" class="h-12 w-20 shrink-0 rounded object-cover" referrerpolicy="no-referrer" />
-                  <div class="min-w-0">
-                    <div class="truncate font-medium">{m.title}</div>
-                    <div class="text-xs text-muted-foreground">
-                      {m.upName} · {formatDuration(m.duration)}
+                <div class="flex gap-2">
+                  <input
+                    type="checkbox"
+                    aria-label={`选择 ${m.title}`}
+                    checked={selected().includes(m.bvid)}
+                    onChange={(e) =>
+                      setSelected((s) => (e.currentTarget.checked ? [...s, m.bvid] : s.filter((v) => v !== m.bvid)))
+                    }
+                  />
+                  <button
+                    type="button"
+                    class="flex items-center gap-3 rounded-md border p-2 text-left text-sm hover:bg-accent"
+                    onClick={() => openVideo(m.bvid)}
+                  >
+                    <img
+                      src={m.cover}
+                      alt=""
+                      class="h-12 w-20 shrink-0 rounded object-cover"
+                      referrerpolicy="no-referrer"
+                    />
+                    <div class="min-w-0">
+                      <div class="truncate font-medium">{m.title}</div>
+                      <div class="text-xs text-muted-foreground">
+                        {m.upName} · {formatDuration(m.duration)}
+                      </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                </div>
               )}
             </For>
           </div>
@@ -223,19 +312,26 @@ function ImportPage() {
                   </select>
                 </Show>
 
-                <BiliCropper
-                  src={streamUrl()}
-                  duration={duration()}
-                  start={start()}
-                  end={end()}
-                  onChange={(s, e) => {
-                    setStart(s);
-                    setEnd(e);
-                  }}
-                />
+                <Show when={!streamUrl.loading && streamUrl()} fallback={<p class="text-sm">加载试听地址…</p>}>
+                  <BiliCropper
+                    src={streamUrl() ?? ''}
+                    duration={duration()}
+                    start={start()}
+                    end={end()}
+                    onChange={(s, e) => {
+                      setStart(s);
+                      setEnd(e);
+                    }}
+                  />
+                </Show>
 
                 <div class="grid gap-3 sm:grid-cols-2">
                   <Input placeholder="标题" value={title()} onInput={(e) => setTitle(e.currentTarget.value)} />
+                  <Input
+                    placeholder="已有曲目 ID（可选）"
+                    value={target()}
+                    onInput={(e) => setTarget(e.currentTarget.value)}
+                  />
                   <Input placeholder="艺术家" value={artist()} onInput={(e) => setArtist(e.currentTarget.value)} />
                 </div>
 
@@ -253,7 +349,9 @@ function ImportPage() {
                     onChange={(e) => setProvider(e.currentTarget.value)}
                   >
                     <option value="xfyun">讯飞</option>
-                    <option value="netease">网易云</option>
+                    <option value="netease" disabled>
+                      网易云（暂未支持）
+                    </option>
                   </select>
                   <Button variant="outline" disabled={busy() !== ''} onClick={recognize}>
                     {busy() === 'recognize' ? '识别中…' : '识别此片段'}

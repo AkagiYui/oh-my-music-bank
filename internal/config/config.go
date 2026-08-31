@@ -24,7 +24,7 @@ const (
 	defaultConnMaxLifetimeSecs = 1800
 	defaultConnMaxIdleTimeSecs = 300
 	defaultDBRetryMaxAttempts  = 5
-	defaultAccessTokenTTL      = "48h"
+	defaultAccessTokenTTL      = "15m"
 	defaultRefreshTokenTTL     = "168h"
 	defaultUploadMaxSizeMB     = 200
 )
@@ -158,6 +158,12 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 
+	if len(strings.TrimSpace(cfg.Auth.JWTSecret)) < 32 {
+		return nil, fmt.Errorf("auth.jwt_secret must contain at least 32 bytes")
+	}
+	if cfg.Upload.MaxSizeMB < 1 || cfg.Upload.MaxSizeMB > 2048 {
+		return nil, fmt.Errorf("upload.max_size_mb must be between 1 and 2048")
+	}
 	if cfg.Database.DSN == "" {
 		return nil, fmt.Errorf("database dsn is required (set env DB or OMMB_DATABASE_DSN)")
 	}
@@ -192,7 +198,7 @@ func parseDuration(field, raw string) (time.Duration, error) {
 		if err != nil {
 			return 0, fmt.Errorf("parse %s: invalid days %q: %w", field, raw[:idx], err)
 		}
-		total := time.Duration(d*24) * time.Hour
+		total := time.Duration(d * float64(24*time.Hour))
 		if rest := raw[idx+1:]; rest != "" {
 			sub, err := time.ParseDuration(rest)
 			if err != nil {
@@ -200,11 +206,17 @@ func parseDuration(field, raw string) (time.Duration, error) {
 			}
 			total += sub
 		}
+		if total <= 0 {
+			return 0, fmt.Errorf("%s must be positive", field)
+		}
 		return total, nil
 	}
 	parsed, err := time.ParseDuration(raw)
 	if err != nil {
 		return 0, fmt.Errorf("parse %s: %w", field, err)
+	}
+	if parsed <= 0 {
+		return 0, fmt.Errorf("%s must be positive", field)
 	}
 	return parsed, nil
 }

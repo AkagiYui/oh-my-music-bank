@@ -6,10 +6,12 @@
 package audiometa
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/akagiyui/oh-my-music-bank/internal/service/audioproc"
 	"os"
-	"os/exec"
+
 	"regexp"
 	"strconv"
 	"strings"
@@ -40,11 +42,16 @@ type Meta struct {
 }
 
 // Parse 解析指定路径的音频文件（标签 + 技术参数 + 响度，均 best-effort）。
-func Parse(path string) (*Meta, error) {
+func Parse(ctx context.Context, path string) (*Meta, error) {
 	meta := &Meta{}
 	parseTags(path, meta)
-	parseFFprobe(path, meta)
-	meta.Loudness = measureLoudness(path)
+	if err := parseFFprobe(ctx, path, meta); err != nil {
+		return nil, err
+	}
+	meta.Loudness = measureLoudness(ctx, path)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	return meta, nil
 }
 
@@ -53,15 +60,12 @@ var loudnormInputI = regexp.MustCompile(`"input_i"\s*:\s*"(-?[0-9.]+)"`)
 
 // measureLoudness 用 ffmpeg 的 loudnorm 滤镜测量集成响度（LUFS）。
 // 需要一次完整解码，耗时较长；ffmpeg 缺失或静音（-inf）时返回 nil。
-func measureLoudness(path string) *float64 {
-	cmd := exec.Command("ffmpeg", "-hide_banner", "-nostats",
-		"-i", path, "-af", "loudnorm=print_format=json", "-f", "null", "-")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	// loudnorm 把 JSON 打到 stderr；即使退出码非零也尝试解析。
-	_ = cmd.Run()
-
-	m := loudnormInputI.FindStringSubmatch(stderr.String())
+func measureLoudness(ctx context.Context, path string) *float64 {
+	_, stderr, err := audioproc.Command(ctx, "ffmpeg", "-nostdin", "-hide_banner", "-nostats", "-i", path, "-af", "loudnorm=print_format=json", "-f", "null", "-")
+	if err != nil {
+		return nil
+	}
+	m := loudnormInputI.FindStringSubmatch(string(stderr))
 	if m == nil {
 		return nil
 	}
@@ -118,21 +122,21 @@ type ffprobeOutput struct {
 }
 
 // parseFFprobe 用 ffprobe 提取技术参数，best-effort。
-func parseFFprobe(path string, meta *Meta) {
-	out, err := exec.Command("ffprobe",
+func parseFFprobe(ctx context.Context, path string, meta *Meta) error {
+	out, _, err := audioproc.Command(ctx, "ffprobe",
 		"-v", "quiet",
 		"-print_format", "json",
 		"-show_format",
 		"-show_streams",
 		path,
-	).Output()
+	)
 	if err != nil {
-		return
+		return fmt.Errorf("无法读取有效音频")
 	}
 
 	var probe ffprobeOutput
 	if err := json.Unmarshal(out, &probe); err != nil {
-		return
+		return fmt.Errorf("无法读取有效音频")
 	}
 
 	if d, err := strconv.ParseFloat(probe.Format.Duration, 64); err == nil {
@@ -148,10 +152,12 @@ func parseFFprobe(path string, meta *Meta) {
 		meta.Encoder = enc
 	}
 
+	found := false
 	for _, st := range probe.Streams {
 		if st.CodecType != "audio" {
 			continue
 		}
+		found = true
 		if sr, err := strconv.Atoi(st.SampleRate); err == nil {
 			meta.SamplingRate = sr
 		}
@@ -173,4 +179,8 @@ func parseFFprobe(path string, meta *Meta) {
 		}
 		break
 	}
+	if !found || meta.Duration <= 0 || meta.ChannelCount <= 0 {
+		return fmt.Errorf("文件不包含有效音轨或时长为零")
+	}
+	return nil
 }

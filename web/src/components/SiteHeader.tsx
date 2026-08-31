@@ -58,8 +58,8 @@ export function SiteHeader() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => {
-                logout();
+              onClick={async () => {
+                await logout();
                 navigate({ to: '/' });
               }}
             >

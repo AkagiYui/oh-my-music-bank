@@ -1,3 +1,4 @@
+import { Pagination } from '../components/Pagination';
 /** 路由 `/admin/api-keys` —— 全站 API Key 管理。 */
 import { For, Show, createResource, createSignal } from 'solid-js';
 import { createFileRoute } from '@tanstack/solid-router';
@@ -13,7 +14,12 @@ export const Route = createFileRoute('/admin/api-keys')({
 function ApiKeysPage() {
   const [q, setQ] = createSignal('');
   const [term, setTerm] = createSignal('');
-  const [keys, { refetch }] = createResource(term, (t) => api.admin.apiKeys.list(t).then((r) => r.data));
+  const [page, setPage] = createSignal(1);
+  const [paged, { refetch }] = createResource(
+    () => ({ term: term(), page: page() }),
+    (p) => api.admin.apiKeys.list(p.term, p.page),
+  );
+  const keys = () => paged()?.data;
 
   const fmt = (s: string | null) => (s ? new Date(s).toLocaleString() : '—');
 
@@ -26,10 +32,15 @@ function ApiKeysPage() {
             class="flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
+              setPage(1);
               setTerm(q().trim());
             }}
           >
-            <Input placeholder="按名称 / 前缀 / 用户名 / 邮箱搜索" value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
+            <Input
+              placeholder="按名称 / 前缀 / 用户名 / 邮箱搜索"
+              value={q()}
+              onInput={(e) => setQ(e.currentTarget.value)}
+            />
             <Button type="submit" variant="secondary">
               搜索
             </Button>
@@ -48,6 +59,20 @@ function ApiKeysPage() {
                       <span class="ml-2 text-xs text-muted-foreground">最后使用 {fmt(k.lastUsedAt)}</span>
                     </div>
                     <div class="ml-auto flex items-center gap-2">
+                      <label class="flex items-center gap-1 text-xs">
+                        每分钟
+                        <Input
+                          type="number"
+                          class="w-20"
+                          min="1"
+                          max="10000"
+                          value={k.rpmOverride ?? 60}
+                          onChange={async (e) => {
+                            await api.admin.apiKeys.update(k.id, { rpmOverride: Number(e.currentTarget.value) });
+                            refetch();
+                          }}
+                        />
+                      </label>
                       <Show
                         when={k.isRevoked}
                         fallback={<span class="rounded bg-green-500/10 px-2 py-0.5 text-xs text-green-600">启用</span>}
@@ -74,6 +99,13 @@ function ApiKeysPage() {
               </For>
             </div>
           </Show>
+          <Pagination
+            page={page()}
+            total={paged()?.total ?? 0}
+            pageSize={50}
+            loading={paged.loading}
+            onPage={setPage}
+          />
         </CardContent>
       </Card>
     </div>

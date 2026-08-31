@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -33,6 +34,7 @@ func (h *SiteHandler) PublicConfig(c *gin.Context) {
 // AdminGetSettings 返回管理员可编辑的设置。
 func (h *SiteHandler) AdminGetSettings(c *gin.Context) {
 	response.Success(c, gin.H{
+		"logRetentionDays":    h.cache.GetSettingDefault("logs.retention_days", "0"),
 		"brandName":           h.cache.GetSettingDefault("site.brand_name", "Oh My Music Bank"),
 		"registrationEnabled": h.cache.GetSettingDefault("site.registration_enabled", "true") == "true",
 	})
@@ -41,12 +43,23 @@ func (h *SiteHandler) AdminGetSettings(c *gin.Context) {
 // AdminUpdateSettings 更新站点设置。
 func (h *SiteHandler) AdminUpdateSettings(c *gin.Context) {
 	var req struct {
+		LogRetentionDays    *int    `json:"logRetentionDays"`
 		BrandName           *string `json:"brandName"`
 		RegistrationEnabled *bool   `json:"registrationEnabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest(err.Error()))
 		return
+	}
+	if req.LogRetentionDays != nil {
+		if *req.LogRetentionDays < 0 || *req.LogRetentionDays > 3650 {
+			c.JSON(400, pkgerrors.BadRequest("保留天数须为0至3650，0表示永久保留"))
+			return
+		}
+		if err := h.cache.SetSetting("logs.retention_days", strconv.Itoa(*req.LogRetentionDays)); err != nil {
+			c.JSON(500, pkgerrors.Internal("保存失败"))
+			return
+		}
 	}
 	if req.BrandName != nil {
 		if err := h.cache.SetSetting("site.brand_name", *req.BrandName); err != nil {

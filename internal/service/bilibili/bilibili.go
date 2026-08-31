@@ -422,6 +422,9 @@ func (c *Client) Download(ctx context.Context, audioURL string, w io.Writer) err
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		return fmt.Errorf("bilibili audio http %d", resp.StatusCode)
 	}
-	_, err = io.Copy(w, resp.Body)
+	n, err := io.Copy(w, io.LimitReader(resp.Body, (2<<30)+1))
+	if n > 2<<30 {
+		return fmt.Errorf("音频超过 2GB 限制")
+	}
 	return err
 }

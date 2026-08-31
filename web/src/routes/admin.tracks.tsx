@@ -1,3 +1,5 @@
+import { TrackFilters } from '../components/TrackFilters';
+import { Pagination } from '../components/Pagination';
 /** 路由 `/admin/tracks` —— 曲目管理：列表 + 完整编辑（基础信息、别名、艺术家、专辑、语种、音频）。 */
 import { For, Show, createEffect, createResource, createSignal } from 'solid-js';
 import { createFileRoute } from '@tanstack/solid-router';
@@ -16,15 +18,24 @@ export const Route = createFileRoute('/admin/tracks')({
 
 const artistSearch = (q: string): Promise<Entity[]> =>
   api.admin.artists.list(q).then((r) => r.data.map((a) => ({ id: a.id, name: a.name })));
-const artistCreate = (name: string): Promise<Entity> => api.admin.artists.create(name).then((a) => ({ id: a.id, name: a.name }));
+const artistCreate = (name: string): Promise<Entity> =>
+  api.admin.artists.create(name).then((a) => ({ id: a.id, name: a.name }));
 const albumSearch = (q: string): Promise<Entity[]> =>
   api.admin.albums.list(q).then((r) => r.data.map((a) => ({ id: a.id, name: a.title })));
-const albumCreate = (name: string): Promise<Entity> => api.admin.albums.create(name).then((a) => ({ id: a.id, name: a.title }));
+const albumCreate = (name: string): Promise<Entity> =>
+  api.admin.albums.create(name).then((a) => ({ id: a.id, name: a.title }));
 
 function TracksPage() {
   const [q, setQ] = createSignal('');
+  const [filters, setFilters] = createSignal<Record<string, string>>({});
+  const [activeFilters, setActiveFilters] = createSignal<Record<string, string>>({});
   const [term, setTerm] = createSignal('');
-  const [list, { refetch }] = createResource(term, (t) => api.admin.tracks.list(t).then((r) => r.data));
+  const [page, setPage] = createSignal(1);
+  const [paged, { refetch }] = createResource(
+    () => ({ term: term(), page: page(), filters: activeFilters() }),
+    (p) => api.admin.tracks.list(p.term, p.page, p.filters),
+  );
+  const list = () => paged()?.data;
   const [editing, setEditing] = createSignal<string | null>(null);
 
   async function remove(id: string) {
@@ -39,14 +50,21 @@ function TracksPage() {
       <h1 class="text-2xl font-semibold">曲目管理</h1>
       <Card>
         <CardContent class="space-y-4 p-4">
+          <TrackFilters value={filters()} onChange={setFilters} />
           <form
             class="flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
+              setPage(1);
+              setActiveFilters(filters());
               setTerm(q().trim());
             }}
           >
-            <Input placeholder="按标题搜索" value={q()} onInput={(e) => setQ(e.currentTarget.value)} />
+            <Input
+              placeholder="搜索标题、别名、艺术家或专辑"
+              value={q()}
+              onInput={(e) => setQ(e.currentTarget.value)}
+            />
             <Button type="submit" variant="secondary">
               搜索
             </Button>
@@ -69,7 +87,9 @@ function TracksPage() {
                     <div class="ml-auto flex items-center gap-2">
                       <Show
                         when={t.available}
-                        fallback={<span class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">已下架</span>}
+                        fallback={
+                          <span class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">已下架</span>
+                        }
                       >
                         <span class="rounded bg-green-500/10 px-2 py-0.5 text-xs text-green-600">可搜索</span>
                       </Show>
@@ -90,6 +110,13 @@ function TracksPage() {
               )}
             </For>
           </div>
+          <Pagination
+            page={page()}
+            total={paged()?.total ?? 0}
+            pageSize={50}
+            loading={paged.loading}
+            onPage={setPage}
+          />
         </CardContent>
       </Card>
     </div>
@@ -126,6 +153,15 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
   const [metaQ, setMetaQ] = createSignal('');
   const [metaResults, setMetaResults] = createSignal<MetaSong[]>([]);
   const [metaBusy, setMetaBusy] = createSignal(false);
+  const [mergeTarget, setMergeTarget] = createSignal('');
+  const [metaFields, setMetaFields] = createSignal<string[]>([
+    'title',
+    'artists',
+    'album',
+    'lyric',
+    'lrcLyric',
+    'coverUrl',
+  ]);
 
   async function searchMeta() {
     setMetaBusy(true);
@@ -139,14 +175,18 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
     setMetaBusy(true);
     try {
       const full = await api.admin.metadata.song(songId);
-      await api.admin.metadata.enrich(props.id, {
+      const values: Record<string, unknown> = {
         title: full.title,
         artists: full.artists,
         album: full.album,
         lyric: full.lyric,
         lrcLyric: full.lrc,
         coverUrl: full.coverUrl,
-      });
+      };
+      await api.admin.metadata.enrich(
+        props.id,
+        Object.fromEntries(Object.entries(values).filter(([key]) => metaFields().includes(key))),
+      );
       setMetaResults([]);
       refetch();
       props.onChanged();
@@ -178,11 +218,17 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
   }
   async function changeArtists(items: Entity[]) {
     setArtists(items);
-    await api.admin.tracks.setArtists(props.id, items.map((i) => i.id));
+    await api.admin.tracks.setArtists(
+      props.id,
+      items.map((i) => i.id),
+    );
   }
   async function changeAlbums(items: Entity[]) {
     setAlbums(items);
-    await api.admin.tracks.setAlbums(props.id, items.map((i) => i.id));
+    await api.admin.tracks.setAlbums(
+      props.id,
+      items.map((i) => i.id),
+    );
   }
   async function toggleLang(id: number, checked: boolean) {
     const next = checked ? [...langIds(), id] : langIds().filter((x) => x !== id);
@@ -199,7 +245,32 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
     <div class="space-y-5">
       {/* 匹配元信息（网易云） */}
       <div class="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3">
-        <div class="text-sm font-medium">匹配元信息</div>
+        <div class="text-sm font-medium">匹配元信息（仅覆盖选中字段）</div>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <For
+            each={[
+              ['title', '标题'],
+              ['artists', '艺术家'],
+              ['album', '专辑'],
+              ['lyric', '歌词'],
+              ['lrcLyric', 'LRC'],
+              ['coverUrl', '封面'],
+            ]}
+          >
+            {([key, label]) => (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={metaFields().includes(key)}
+                  onChange={(e) =>
+                    setMetaFields((v) => (e.currentTarget.checked ? [...v, key] : v.filter((x) => x !== key)))
+                  }
+                />{' '}
+                {label}
+              </label>
+            )}
+          </For>
+        </div>
         <div class="flex gap-2">
           <Input
             class="h-9"
@@ -223,7 +294,12 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
               {(m) => (
                 <div class="flex items-center gap-2 p-2 text-sm">
                   <Show when={m.coverUrl} fallback={<div class="size-9 shrink-0 rounded bg-muted" />}>
-                    <img src={m.coverUrl} alt="" class="size-9 shrink-0 rounded object-cover" referrerpolicy="no-referrer" />
+                    <img
+                      src={m.coverUrl}
+                      alt=""
+                      class="size-9 shrink-0 rounded object-cover"
+                      referrerpolicy="no-referrer"
+                    />
                   </Show>
                   <div class="min-w-0">
                     <div class="truncate font-medium">{m.title}</div>
@@ -254,7 +330,12 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
           </div>
         </div>
         <label class="flex items-center gap-2 text-sm">
-          <input type="checkbox" class="size-4" checked={available()} onChange={(e) => setAvailable(e.currentTarget.checked)} />
+          <input
+            type="checkbox"
+            class="size-4"
+            checked={available()}
+            onChange={(e) => setAvailable(e.currentTarget.checked)}
+          />
           可被搜索
         </label>
         <div class="grid gap-3 sm:grid-cols-2">
@@ -280,7 +361,11 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
             {(al) => (
               <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
                 {al.alias}
-                <button type="button" class="text-muted-foreground hover:text-foreground" onClick={() => delAlias(al.id)}>
+                <button
+                  type="button"
+                  class="text-muted-foreground hover:text-foreground"
+                  onClick={() => delAlias(al.id)}
+                >
                   ×
                 </button>
               </span>
@@ -288,7 +373,12 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
           </For>
         </div>
         <div class="flex gap-2">
-          <Input class="h-9" placeholder="添加别名" value={aliasInput()} onInput={(e) => setAliasInput(e.currentTarget.value)} />
+          <Input
+            class="h-9"
+            placeholder="添加别名"
+            value={aliasInput()}
+            onInput={(e) => setAliasInput(e.currentTarget.value)}
+          />
           <Button size="sm" variant="secondary" onClick={addAlias}>
             添加
           </Button>
@@ -296,8 +386,20 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
       </div>
 
       {/* 艺术家 / 专辑 */}
-      <EntityPicker label="艺术家" selected={artists()} search={artistSearch} onChange={changeArtists} allowCreate={artistCreate} />
-      <EntityPicker label="专辑" selected={albums()} search={albumSearch} onChange={changeAlbums} allowCreate={albumCreate} />
+      <EntityPicker
+        label="艺术家"
+        selected={artists()}
+        search={artistSearch}
+        onChange={changeArtists}
+        allowCreate={artistCreate}
+      />
+      <EntityPicker
+        label="专辑"
+        selected={albums()}
+        search={albumSearch}
+        onChange={changeAlbums}
+        allowCreate={albumCreate}
+      />
 
       {/* 语种 */}
       <div class="space-y-2">
@@ -321,7 +423,7 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
 
       {/* 分发音频 */}
       <div class="space-y-2">
-        <div class="text-sm font-medium">分发音频</div>
+        <div class="text-sm font-medium">分发音频 · 曲目 ID：{props.id}</div>
         <Show when={(detail()?.audios ?? []).length > 0} fallback={<p class="text-xs text-muted-foreground">无</p>}>
           <AudioPlayer
             sources={(detail()?.audios ?? []).map((au) => ({
@@ -337,7 +439,9 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
                 <div class="flex flex-wrap items-center gap-2 p-2">
                   <span class="rounded bg-primary/10 px-2 py-0.5 font-medium text-primary">{au.qualityLabel}</span>
                   <span class="text-muted-foreground">
-                    {au.format} · {Math.round(au.bitrate / 1000)} kbps · {au.samplingRate} Hz · {(au.size / 1048576).toFixed(1)} MB
+                    {au.source ? `${au.source} · ` : ''}
+                    {au.format} · {Math.round(au.bitrate / 1000)} kbps · {au.samplingRate} Hz ·{' '}
+                    {(au.size / 1048576).toFixed(1)} MB
                     {au.loudness != null ? ` · ${au.loudness.toFixed(1)} LUFS` : ''}
                   </span>
                   <Button size="sm" variant="ghost" class="ml-auto h-6" onClick={() => delAudio(au.id)}>
@@ -364,6 +468,21 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
             </div>
           )}
         </For>
+      </div>
+      <div class="space-y-2 rounded border p-3">
+        <p class="text-sm">合并至已有曲目：保留目标基础信息，转移全部音频、关联和别名，然后删除当前曲目。</p>
+        <Input placeholder="目标曲目 ID" value={mergeTarget()} onInput={(e) => setMergeTarget(e.currentTarget.value)} />
+        <Button
+          variant="outline"
+          disabled={!mergeTarget().trim()}
+          onClick={async () => {
+            if (!confirm('确认合并？此操作不可撤销。')) return;
+            await api.admin.tracks.merge(props.id, mergeTarget().trim());
+            props.onChanged();
+          }}
+        >
+          合并曲目
+        </Button>
       </div>
     </div>
   );

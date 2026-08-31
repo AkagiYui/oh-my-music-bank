@@ -73,3 +73,7 @@ func (s *Store) PresignedGet(ctx context.Context, key string, expiry time.Durati
 	}
 	return u.String(), nil
 }
+
+func (s *Store) Open(ctx context.Context, key string) (*minio.Object, error) {
+	return s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+}

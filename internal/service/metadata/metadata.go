@@ -39,6 +39,9 @@ func get(ctx context.Context, rawURL string, out any) error {
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("元数据服务返回 HTTP %d", resp.StatusCode)
+	}
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 

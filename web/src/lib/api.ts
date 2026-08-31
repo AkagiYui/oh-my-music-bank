@@ -28,7 +28,12 @@ export class ApiError extends Error {
 
 async function parseResponse(res: Response): Promise<any> {
   const text = await res.text();
-  const json = text ? JSON.parse(text) : {};
+  let json: any = {};
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    throw new ApiError(res.status, 'invalid_response', '服务返回了无效响应，请稍后重试');
+  }
   if (!res.ok) {
     const e = json?.error ?? {};
     throw new ApiError(res.status, e.code ?? 'error', e.message ?? res.statusText);
@@ -50,6 +55,8 @@ async function tryRefresh(): Promise<boolean> {
         });
         if (!res.ok) return false;
         const json = await res.json();
+        // 刷新期间若已退出或切换账号，丢弃旧会话结果。
+        if (localStorage.getItem(REFRESH_KEY) !== rt) return false;
         setTokens(json.data.accessToken, json.data.refreshToken);
         return true;
       } catch {
@@ -64,6 +71,7 @@ async function tryRefresh(): Promise<boolean> {
 
 async function request(path: string, init: RequestInit = {}, auth = false): Promise<any> {
   const headers = new Headers(init.headers);
+  const originalAccess = auth ? getAccessToken() : null;
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
@@ -72,12 +80,25 @@ async function request(path: string, init: RequestInit = {}, auth = false): Prom
     if (t) headers.set('Authorization', `Bearer ${t}`);
   }
   let res = await fetch(path, { ...init, headers });
-  if (res.status === 401 && auth && (await tryRefresh())) {
+  if (res.status === 401 && auth && getAccessToken() === originalAccess && (await tryRefresh())) {
     const t = getAccessToken();
     if (t) headers.set('Authorization', `Bearer ${t}`);
     res = await fetch(path, { ...init, headers });
   }
-  return parseResponse(res);
+  if (auth && res.status === 401 && headers.get('Authorization') === `Bearer ${getAccessToken()}`) {
+    clearTokens();
+    window.dispatchEvent(new Event('ommb:session-expired'));
+  }
+  try {
+    return await parseResponse(res);
+  } catch (err) {
+    window.dispatchEvent(
+      new CustomEvent('ommb:api-error', {
+        detail: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    throw err;
+  }
 }
 
 async function openRequest(apiKey: string, path: string): Promise<any> {
@@ -95,6 +116,20 @@ const qs = (params: Record<string, string | number | undefined>) => {
 };
 
 // ===== 类型 =====
+export interface IngestJob {
+  id: string;
+  kind: string;
+  status: string;
+  stage: string;
+  progress: number;
+  errorMessage: string;
+  trackId?: string;
+  deduplicated: boolean;
+  attempts: number;
+  createdAt: string;
+  cancelRequested: boolean;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -156,13 +191,20 @@ export interface AlbumDetail {
   coverKey?: string;
   coverUrl?: string;
   artists: ArtistDTO[];
-  tracks: { id: string; title: string; duration: number }[];
+  tracks: {
+    id: string;
+    title: string;
+    duration: number;
+    trackNo?: number;
+    discNo?: number;
+  }[];
 }
 export interface Language {
   id: number;
   name: string;
 }
 export interface AudioDTO {
+  source?: string;
   id: string;
   qualityLabel: string;
   format: string;
@@ -291,37 +333,79 @@ export interface IntegrationsConfig {
 
 // ===== 接口集合 =====
 export const api = {
-  site: (): Promise<{ brandName: string; registrationEnabled: boolean }> =>
-    request('/api/v1/site').then((r) => r.data),
+  site: (): Promise<{ brandName: string; registrationEnabled: boolean }> => request('/api/v1/site').then((r) => r.data),
 
   auth: {
     register: (b: { username: string; email: string; password: string }) =>
-      request('/api/v1/auth/register', { method: 'POST', body: JSON.stringify(b) }).then((r) => r.data),
+      request('/api/v1/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(b),
+      }).then((r) => r.data),
     login: (b: { email: string; password: string }) =>
-      request('/api/v1/auth/login', { method: 'POST', body: JSON.stringify(b) }).then((r) => r.data),
+      request('/api/v1/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(b),
+      }).then((r) => r.data),
+    logout: () => request('/api/v1/auth/logout', { method: 'POST' }, true),
     me: (): Promise<User> => request('/api/v1/auth/me', {}, true).then((r) => r.data),
   },
 
   apiKeys: {
-    list: (): Promise<Paginated<ApiKey>> => request('/api/v1/api-keys?pageSize=100', {}, true),
+    list: (page = 1): Promise<Paginated<ApiKey>> => request(`/api/v1/api-keys?pageSize=20&page=${page}`, {}, true),
     create: (b: { name: string; description?: string }): Promise<{ apiKey: ApiKey; key: string }> =>
       request('/api/v1/api-keys', { method: 'POST', body: JSON.stringify(b) }, true).then((r) => r.data),
     revoke: (id: string) => request(`/api/v1/api-keys/${id}/revoke`, { method: 'POST' }, true),
     remove: (id: string) => request(`/api/v1/api-keys/${id}`, { method: 'DELETE' }, true),
   },
 
+  profile: {
+    email: (email: string) =>
+      request('/api/v1/profile/email', { method: 'PUT', body: JSON.stringify({ email }) }, true),
+    password: (currentPassword: string, newPassword: string) =>
+      request(
+        '/api/v1/profile/password',
+        {
+          method: 'PUT',
+          body: JSON.stringify({ currentPassword, newPassword }),
+        },
+        true,
+      ),
+  },
   admin: {
+    jobs: {
+      list: (page = 1): Promise<Paginated<IngestJob>> =>
+        request(`/api/v1/admin/jobs?page=${page}&pageSize=20`, {}, true),
+      upload: (file: File, fields: { title?: string; artist?: string; trackId?: string }): Promise<IngestJob> => {
+        const body = new FormData();
+        body.append('file', file);
+        for (const [key, value] of Object.entries(fields)) if (value) body.append(key, value);
+        return request('/api/v1/admin/jobs/upload', { method: 'POST', body }, true).then((r) => r.data);
+      },
+      bilibili: (items: Record<string, unknown>[]): Promise<IngestJob[]> =>
+        request('/api/v1/admin/jobs/bilibili', { method: 'POST', body: JSON.stringify({ items }) }, true).then(
+          (r) => r.data,
+        ),
+      cancel: (id: string) => request(`/api/v1/admin/jobs/${id}/cancel`, { method: 'POST' }, true),
+      retry: (id: string) => request(`/api/v1/admin/jobs/${id}/retry`, { method: 'POST' }, true),
+    },
     stats: {
       overview: (): Promise<StatsOverview> => request('/api/v1/admin/stats/overview', {}, true).then((r) => r.data),
       timeseries: (days = 30): Promise<TimeseriesPoint[]> =>
         request(`/api/v1/admin/stats/timeseries?days=${days}`, {}, true).then((r) => r.data),
     },
     logs: {
-      list: (p: { page?: number; apiKeyId?: string; userId?: string; statusCode?: number } = {}): Promise<Paginated<LogEntry>> =>
-        request(`/api/v1/admin/logs${qs({ pageSize: 30, ...p })}`, {}, true),
+      list: (
+        p: {
+          page?: number;
+          apiKeyId?: string;
+          userId?: string;
+          statusCode?: number;
+        } = {},
+      ): Promise<Paginated<LogEntry>> => request(`/api/v1/admin/logs${qs({ pageSize: 30, ...p })}`, {}, true),
     },
     users: {
-      list: (): Promise<Paginated<AdminUser>> => request('/api/v1/admin/users?pageSize=100', {}, true),
+      list: (page = 1): Promise<Paginated<AdminUser>> =>
+        request(`/api/v1/admin/users?pageSize=50&page=${page}`, {}, true),
       setRole: (id: string, role: string) =>
         request(`/api/v1/admin/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) }, true),
       toggleActive: (id: string, isActive: boolean) =>
@@ -329,13 +413,17 @@ export const api = {
       remove: (id: string) => request(`/api/v1/admin/users/${id}`, { method: 'DELETE' }, true),
     },
     apiKeys: {
-      list: (q = ''): Promise<Paginated<AdminApiKey>> => request(`/api/v1/admin/api-keys${qs({ q, pageSize: 50 })}`, {}, true),
+      list: (q = '', page = 1): Promise<Paginated<AdminApiKey>> =>
+        request(`/api/v1/admin/api-keys${qs({ q, page, pageSize: 50 })}`, {}, true),
       update: (id: string, b: Record<string, unknown>) =>
         request(`/api/v1/admin/api-keys/${id}`, { method: 'PUT', body: JSON.stringify(b) }, true),
       remove: (id: string) => request(`/api/v1/admin/api-keys/${id}`, { method: 'DELETE' }, true),
     },
     tracks: {
-      list: (q = ''): Promise<Paginated<TrackDTO>> => request(`/api/v1/admin/tracks${qs({ q, pageSize: 50 })}`, {}, true),
+      merge: (id: string, targetId: string) =>
+        request(`/api/v1/admin/tracks/${id}/merge`, { method: 'POST', body: JSON.stringify({ targetId }) }, true),
+      list: (q = '', page = 1, filters: Record<string, string> = {}): Promise<Paginated<TrackDTO>> =>
+        request(`/api/v1/admin/tracks${qs({ q, page, pageSize: 50, ...filters })}`, {}, true),
       detail: (id: string): Promise<TrackDTO> => request(`/api/v1/admin/tracks/${id}`, {}, true).then((r) => r.data),
       update: (id: string, b: Record<string, unknown>) =>
         request(`/api/v1/admin/tracks/${id}`, { method: 'PUT', body: JSON.stringify(b) }, true),
@@ -352,8 +440,12 @@ export const api = {
         request(`/api/v1/admin/tracks/${id}/languages`, { method: 'PUT', body: JSON.stringify({ languageIds }) }, true),
     },
     artists: {
-      list: (q = ''): Promise<Paginated<ArtistListItem>> => request(`/api/v1/admin/artists${qs({ q, pageSize: 50 })}`, {}, true),
-      detail: (id: string): Promise<ArtistDetail> => request(`/api/v1/admin/artists/${id}`, {}, true).then((r) => r.data),
+      merge: (id: string, targetId: string) =>
+        request(`/api/v1/admin/artists/${id}/merge`, { method: 'POST', body: JSON.stringify({ targetId }) }, true),
+      list: (q = '', page = 1): Promise<Paginated<ArtistListItem>> =>
+        request(`/api/v1/admin/artists${qs({ q, page, pageSize: 50 })}`, {}, true),
+      detail: (id: string): Promise<ArtistDetail> =>
+        request(`/api/v1/admin/artists/${id}`, {}, true).then((r) => r.data),
       create: (name: string): Promise<{ id: string; name: string }> =>
         request('/api/v1/admin/artists', { method: 'POST', body: JSON.stringify({ name }) }, true).then((r) => r.data),
       update: (id: string, b: { name?: string; avatarKey?: string }) =>
@@ -365,7 +457,10 @@ export const api = {
         request(`/api/v1/admin/artists/${id}/aliases/${aliasId}`, { method: 'DELETE' }, true),
     },
     albums: {
-      list: (q = ''): Promise<Paginated<AlbumListItem>> => request(`/api/v1/admin/albums${qs({ q, pageSize: 50 })}`, {}, true),
+      orderTracks: (id: string, tracks: { id: string; trackNo: number; discNo: number }[]) =>
+        request(`/api/v1/admin/albums/${id}/tracks/order`, { method: 'PUT', body: JSON.stringify({ tracks }) }, true),
+      list: (q = '', page = 1): Promise<Paginated<AlbumListItem>> =>
+        request(`/api/v1/admin/albums${qs({ q, page, pageSize: 50 })}`, {}, true),
       detail: (id: string): Promise<AlbumDetail> => request(`/api/v1/admin/albums/${id}`, {}, true).then((r) => r.data),
       create: (title: string): Promise<{ id: string; title: string }> =>
         request('/api/v1/admin/albums', { method: 'POST', body: JSON.stringify({ title }) }, true).then((r) => r.data),
@@ -377,7 +472,8 @@ export const api = {
     },
     languages: {
       list: (): Promise<Language[]> => request('/api/v1/admin/languages', {}, true).then((r) => r.data),
-      create: (name: string) => request('/api/v1/admin/languages', { method: 'POST', body: JSON.stringify({ name }) }, true),
+      create: (name: string) =>
+        request('/api/v1/admin/languages', { method: 'POST', body: JSON.stringify({ name }) }, true),
       remove: (id: number) => request(`/api/v1/admin/languages/${id}`, { method: 'DELETE' }, true),
     },
     audio: {
@@ -386,17 +482,24 @@ export const api = {
         fd.append('file', file);
         if (fields.title) fd.append('title', fields.title);
         if (fields.artist) fd.append('artist', fields.artist);
-        return request('/api/v1/admin/audio/upload', { method: 'POST', body: fd }, true).then((r) => r.data);
+        return request('/api/v1/admin/audio/upload', { method: 'POST', body: fd }, true).then((r) => r.data.track);
       },
       remove: (id: string) => request(`/api/v1/admin/audio/${id}`, { method: 'DELETE' }, true),
     },
     site: {
-      get: (): Promise<{ brandName: string; registrationEnabled: boolean }> =>
-        request('/api/v1/admin/site/settings', {}, true).then((r) => r.data),
-      update: (b: { brandName?: string; registrationEnabled?: boolean }) =>
+      get: (): Promise<{
+        brandName: string;
+        registrationEnabled: boolean;
+        logRetentionDays: string;
+      }> => request('/api/v1/admin/site/settings', {}, true).then((r) => r.data),
+      update: (b: { brandName?: string; registrationEnabled?: boolean; logRetentionDays?: number }) =>
         request('/api/v1/admin/site/settings', { method: 'PUT', body: JSON.stringify(b) }, true),
     },
     integrations: {
+      test: (provider: string): Promise<{ message: string }> =>
+        request('/api/v1/admin/integrations/test', { method: 'POST', body: JSON.stringify({ provider }) }, true).then(
+          (r) => r.data,
+        ),
       get: (): Promise<IntegrationsConfig> => request('/api/v1/admin/integrations', {}, true).then((r) => r.data),
       update: (b: { bilibiliCookie?: string; xfyunAppId?: string; xfyunApiKey?: string }) =>
         request('/api/v1/admin/integrations', { method: 'PUT', body: JSON.stringify(b) }, true),
@@ -404,29 +507,52 @@ export const api = {
     metadata: {
       search: (q: string): Promise<MetaSong[]> =>
         request(`/api/v1/admin/metadata/search?q=${encodeURIComponent(q)}`, {}, true).then((r) => r.data),
-      song: (id: string): Promise<MetaSong> => request(`/api/v1/admin/metadata/song/${id}`, {}, true).then((r) => r.data),
+      song: (id: string): Promise<MetaSong> =>
+        request(`/api/v1/admin/metadata/song/${id}`, {}, true).then((r) => r.data),
       enrich: (trackId: string, b: Record<string, unknown>): Promise<TrackDTO> =>
-        request(`/api/v1/admin/tracks/${trackId}/enrich`, { method: 'POST', body: JSON.stringify(b) }, true).then((r) => r.data),
+        request(`/api/v1/admin/tracks/${trackId}/enrich`, { method: 'POST', body: JSON.stringify(b) }, true).then(
+          (r) => r.data,
+        ),
     },
     bilibili: {
-      status: (): Promise<{ configured: boolean }> => request('/api/v1/admin/bilibili/status', {}, true).then((r) => r.data),
+      status: (): Promise<{ configured: boolean }> =>
+        request('/api/v1/admin/bilibili/status', {}, true).then((r) => r.data),
       favorites: (): Promise<BiliFolder[]> => request('/api/v1/admin/bilibili/favorites', {}, true).then((r) => r.data),
       favoriteItems: (mediaId: number, pn = 1): Promise<{ items: BiliMedia[]; hasMore: boolean }> =>
         request(`/api/v1/admin/bilibili/favorites/${mediaId}?pn=${pn}`, {}, true).then((r) => r.data),
       resolve: (bvid: string): Promise<BiliVideoInfo> =>
         request(`/api/v1/admin/bilibili/resolve?bvid=${encodeURIComponent(bvid)}`, {}, true).then((r) => r.data),
-      streamUrl: (bvid: string, cid: number): string =>
-        `/api/v1/admin/bilibili/stream?bvid=${encodeURIComponent(bvid)}&cid=${cid}&token=${encodeURIComponent(getAccessToken() ?? '')}`,
-      ingest: (b: { bvid: string; cid: number; startSec?: number; endSec?: number; title?: string; artist?: string }): Promise<any> =>
+      streamUrl: (bvid: string, cid: number): Promise<string> =>
+        request(
+          '/api/v1/admin/bilibili/media-token',
+          { method: 'POST', body: JSON.stringify({ bvid, cid }) },
+          true,
+        ).then((r) => r.data.url),
+      ingest: (b: {
+        bvid: string;
+        cid: number;
+        startSec?: number;
+        endSec?: number;
+        title?: string;
+        artist?: string;
+      }): Promise<any> =>
         request('/api/v1/admin/bilibili/ingest', { method: 'POST', body: JSON.stringify(b) }, true).then((r) => r.data),
-      recognize: (b: { bvid: string; cid: number; startSec?: number; endSec?: number; provider: string }): Promise<RecognizeCandidate[]> =>
-        request('/api/v1/admin/bilibili/recognize', { method: 'POST', body: JSON.stringify(b) }, true).then((r) => r.data),
+      recognize: (b: {
+        bvid: string;
+        cid: number;
+        startSec?: number;
+        endSec?: number;
+        provider: string;
+      }): Promise<RecognizeCandidate[]> =>
+        request('/api/v1/admin/bilibili/recognize', { method: 'POST', body: JSON.stringify(b) }, true).then(
+          (r) => r.data,
+        ),
     },
   },
 
   open: {
-    search: (apiKey: string, q: string, page = 1): Promise<Paginated<TrackDTO>> =>
-      openRequest(apiKey, `/api/open/v1/search?q=${encodeURIComponent(q)}&page=${page}&pageSize=20`),
+    search: (apiKey: string, q: string, page = 1, filters: Record<string, string> = {}): Promise<Paginated<TrackDTO>> =>
+      openRequest(apiKey, `/api/open/v1/search${qs({ q, page, pageSize: 20, ...filters })}`),
     getTrack: (apiKey: string, id: string): Promise<TrackDTO> =>
       openRequest(apiKey, `/api/open/v1/tracks/${id}`).then((r) => r.data),
   },

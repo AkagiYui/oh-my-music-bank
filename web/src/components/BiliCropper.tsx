@@ -2,7 +2,7 @@
  * 视频音频裁剪器：在时间轴上拖动起止把手选取片段，可整段播放或试听片段。
  * 音频由后端代理流（带 Referer），支持 Range，故可秒级 seek。
  */
-import { Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { Button } from './ui/button';
 import { formatDuration } from '../lib/utils';
 
@@ -25,6 +25,13 @@ export function BiliCropper(props: {
   const [metaDur, setMetaDur] = createSignal(0);
   const [drag, setDrag] = createSignal<null | 'start' | 'end'>(null);
   let segmentPreview = false;
+  createEffect(() => {
+    props.src;
+    setCur(0);
+    setMetaDur(0);
+    setPlaying(false);
+    segmentPreview = false;
+  });
 
   const dur = () => metaDur() || props.duration || 1;
   const pct = (v: number) => `${(v / dur()) * 100}%`;
@@ -110,7 +117,13 @@ export function BiliCropper(props: {
         onPointerDown={onBarPointerDown}
       >
         {/* 选中区间 */}
-        <div class="absolute inset-y-0 bg-primary/25" style={{ left: pct(props.start), width: pct(props.end - props.start) }} />
+        <div
+          class="absolute inset-y-0 bg-primary/25"
+          style={{
+            left: pct(props.start),
+            width: pct(props.end - props.start),
+          }}
+        />
         {/* 播放头 */}
         <div class="absolute inset-y-0 w-0.5 bg-foreground/60" style={{ left: pct(cur()) }} />
         {/* 起把手 */}
@@ -135,7 +148,8 @@ export function BiliCropper(props: {
           试听片段
         </Button>
         <span class="tabular-nums">
-          起 {formatDuration(props.start)} · 止 {formatDuration(props.end)} · 时长 {formatDuration(props.end - props.start)}
+          起 {formatDuration(props.start)} · 止 {formatDuration(props.end)} · 时长{' '}
+          {formatDuration(props.end - props.start)}
         </span>
         <span class="ml-auto tabular-nums">
           {formatDuration(cur())} / {formatDuration(dur())}
@@ -143,10 +157,20 @@ export function BiliCropper(props: {
       </div>
 
       <div class="flex items-center gap-2 text-xs">
-        <Button size="sm" variant="ghost" class="h-7" onClick={() => props.onChange(cur(), props.end)}>
+        <Button
+          size="sm"
+          variant="ghost"
+          class="h-7"
+          onClick={() => props.onChange(Math.min(cur(), props.end - 0.5), props.end)}
+        >
           以当前为起点
         </Button>
-        <Button size="sm" variant="ghost" class="h-7" onClick={() => props.onChange(props.start, cur())}>
+        <Button
+          size="sm"
+          variant="ghost"
+          class="h-7"
+          onClick={() => props.onChange(props.start, Math.max(props.start + 0.5, cur()))}
+        >
           以当前为终点
         </Button>
         <Show when={props.start > 0 || props.end < dur()}>

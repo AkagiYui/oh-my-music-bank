@@ -31,7 +31,9 @@ const searchWhere = `t.available AND (
 	t.title ILIKE @pattern
 	OR EXISTS (SELECT 1 FROM track_aliases al WHERE al.track_id = t.id AND al.alias ILIKE @pattern)
 	OR EXISTS (SELECT 1 FROM track_artists ta JOIN artist a ON a.id = ta.artist_id WHERE ta.track_id = t.id AND a.name ILIKE @pattern)
-	OR similarity(t.title, @q) > 0.2
+	OR EXISTS (SELECT 1 FROM track_artists ta JOIN artist_aliases aa ON aa.artist_id=ta.artist_id WHERE ta.track_id=t.id AND aa.alias ILIKE @pattern)
+ OR EXISTS (SELECT 1 FROM track_albums ta JOIN album al ON al.id=ta.album_id WHERE ta.track_id=t.id AND al.title ILIKE @pattern)
+ OR similarity(t.title, @q) > 0.2
 )`
 
 // 相关性打分：标题精确 > 标题前缀 > 标题包含 > 标题相似度 > 艺术家相似度 > 别名命中/相似度。
@@ -49,26 +51,41 @@ const searchScore = `
 func (h *PublicHandler) Search(c *gin.Context) {
 	q := strings.TrimSpace(c.Query("q"))
 	page, pageSize, offset := parsePagination(c)
-	if q == "" {
+	if q == "" && !c.GetBool("admin_search") && c.Query("album") == "" && c.Query("language") == "" && c.Query("quality") == "" {
 		response.Paginated(c, []TrackDTO{}, 0, page, pageSize)
 		return
 	}
 	pattern := "%" + q + "%"
 	prefix := q + "%"
 
+	where := searchWhere
+	if c.GetBool("admin_search") {
+		where = strings.TrimPrefix(where, "t.available AND ")
+	}
+	if c.Query("album") != "" {
+		where += " AND EXISTS (SELECT 1 FROM track_albums ta JOIN album al ON al.id=ta.album_id WHERE ta.track_id=t.id AND al.title ILIKE @album)"
+	}
+	if c.Query("language") != "" {
+		where += " AND EXISTS (SELECT 1 FROM track_languages tl JOIN language l ON l.id=tl.language_id WHERE tl.track_id=t.id AND l.name ILIKE @language)"
+	}
+	if c.Query("quality") != "" {
+		where += " AND EXISTS (SELECT 1 FROM audio a WHERE a.track_id=t.id AND a.quality_label LIKE @quality)"
+	}
+	args := []any{sql.Named("q", q), sql.Named("pattern", pattern), sql.Named("prefix", prefix), sql.Named("limit", pageSize), sql.Named("offset", offset), sql.Named("album", "%"+c.Query("album")+"%"), sql.Named("language", "%"+c.Query("language")+"%"), sql.Named("quality", c.Query("quality")+"%")}
 	var total int64
-	h.db.Raw("SELECT COUNT(*) FROM track t WHERE "+searchWhere,
-		sql.Named("q", q), sql.Named("pattern", pattern)).Scan(&total)
+	if err := h.db.Raw("SELECT COUNT(*) FROM track t WHERE "+where, args...).Scan(&total).Error; err != nil {
+		c.JSON(500, pkgerrors.Internal("search failed"))
+		return
+	}
 
 	var ranked []struct {
 		ID    int64
 		Score float64
 	}
 	if err := h.db.Raw(
-		"SELECT t.id AS id, ("+searchScore+") AS score FROM track t WHERE "+searchWhere+
-			" ORDER BY score DESC, t.title ASC LIMIT @limit OFFSET @offset",
-		sql.Named("q", q), sql.Named("pattern", pattern), sql.Named("prefix", prefix),
-		sql.Named("limit", pageSize), sql.Named("offset", offset),
+		"SELECT t.id AS id, ("+searchScore+") AS score FROM track t WHERE "+where+
+			" ORDER BY score DESC, t.title ASC, t.id ASC LIMIT @limit OFFSET @offset",
+		args...,
 	).Scan(&ranked).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("search failed"))
 		return
@@ -127,5 +144,5 @@ func (h *PublicHandler) GetTrack(c *gin.Context) {
 		c.JSON(http.StatusNotFound, pkgerrors.NotFound("track not found"))
 		return
 	}
-	response.Success(c, buildTrackDTO(h.db, h.store, &t, true))
+	response.Success(c, buildTrackDTO(c, h.db, h.store, &t, true))
 }

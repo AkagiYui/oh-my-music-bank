@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"context"
+	"github.com/akagiyui/oh-my-music-bank/internal/service/objectgc"
 	"io"
 	"net/http"
 	"os"
@@ -34,6 +34,7 @@ func NewAudioHandler(db *gorm.DB, store *objectstore.Store, cfg config.Upload) *
 func (h *AudioHandler) Upload(c *gin.Context) {
 	maxBytes := int64(h.cfg.MaxSizeMB) << 20
 
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes+(1<<20))
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest("file is required"))
@@ -44,6 +45,13 @@ func (h *AudioHandler) Upload(c *gin.Context) {
 		return
 	}
 
+	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+	switch ext {
+	case ".mp3", ".m4a", ".mp4", ".flac", ".wav", ".ogg", ".opus", ".aac", ".aiff", ".ape":
+	default:
+		c.JSON(400, pkgerrors.BadRequest("不支持的音频扩展名"))
+		return
+	}
 	src, err := fileHeader.Open()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to open upload"))
@@ -74,12 +82,12 @@ func (h *AudioHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	dto := buildTrackDTO(h.db, h.store, track, true)
+	dto := buildTrackDTO(c, h.db, h.store, track, true)
 	if dedup {
 		response.Success(c, gin.H{"deduplicated": true, "track": dto})
 		return
 	}
-	response.Created(c, dto)
+	response.Created(c, gin.H{"deduplicated": false, "track": dto})
 }
 
 // DeleteAudio 删除某个音质档位的分发音频（同时清理对象）。
@@ -90,10 +98,15 @@ func (h *AudioHandler) DeleteAudio(c *gin.Context) {
 		c.JSON(http.StatusNotFound, pkgerrors.NotFound("audio not found"))
 		return
 	}
-	if err := h.db.Delete(&audio).Error; err != nil {
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&audio).Error; err != nil {
+			return err
+		}
+		return objectgc.Schedule(tx, audio.FileKey, 0)
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to delete audio"))
 		return
 	}
-	go h.store.Remove(context.Background(), audio.FileKey)
+
 	response.NoContent(c)
 }

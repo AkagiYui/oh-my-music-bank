@@ -1,22 +1,17 @@
-// Package middleware 提供认证与日志中间件。
 package middleware
 
 import (
-	"net/http"
-	"strings"
-	"time"
-
-	"github.com/gin-gonic/gin"
-	jwt "github.com/golang-jwt/jwt/v5"
-	"gorm.io/gorm"
-
 	"github.com/akagiyui/oh-my-music-bank/internal/config"
 	"github.com/akagiyui/oh-my-music-bank/internal/model"
+	"github.com/akagiyui/oh-my-music-bank/internal/service/session"
 	pkgerrors "github.com/akagiyui/oh-my-music-bank/pkg/errors"
 	"github.com/akagiyui/oh-my-music-bank/pkg/keys"
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+	"net/http"
+	"strings"
 )
 
-// 上下文键。
 const (
 	CtxUser     = "user"
 	CtxUserID   = "user_id"
@@ -24,159 +19,96 @@ const (
 	CtxAPIKeyID = "api_key_id"
 )
 
-// WebAuthMiddleware 解析 Bearer JWT 并从数据库加载最新用户信息。
 func WebAuthMiddleware(cfg config.Auth, db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("missing or invalid authorization header"))
+		raw := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+		claims, err := session.Parse(cfg, raw, "access")
+		if err != nil {
+			c.AbortWithStatusJSON(401, pkgerrors.Unauthorized("invalid or expired access token"))
 			return
 		}
-
-		token, err := jwt.Parse(parts[1], func(t *jwt.Token) (any, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, jwt.ErrSignatureInvalid
-			}
-			return []byte(cfg.JWTSecret), nil
-		})
-		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("invalid or expired token"))
+		u, err := session.User(db.WithContext(c.Request.Context()), claims)
+		if err != nil {
+			c.AbortWithStatusJSON(401, pkgerrors.Unauthorized("session revoked or user inactive"))
 			return
 		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("invalid token claims"))
-			return
-		}
-		userID, _ := claims["user_id"].(string)
-		if userID == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("missing user_id claim"))
-			return
-		}
-
-		var user model.User
-		if err := db.Where("id = ? AND is_active = true", userID).First(&user).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("user not found or inactive"))
-				return
-			}
-			c.AbortWithStatusJSON(http.StatusInternalServerError, pkgerrors.Internal("failed to query user"))
-			return
-		}
-
-		c.Set(CtxUser, &user)
-		c.Set(CtxUserID, user.ID)
-		c.Set(CtxUserRole, user.Role)
+		c.Set(CtxUser, u)
+		c.Set(CtxUserID, u.ID)
+		c.Set(CtxUserRole, u.Role)
+		c.Set("session_id", claims.SessionID)
 		c.Next()
 	}
 }
-
-// AdminOnly 要求当前用户为管理员。须在 WebAuthMiddleware 之后使用。
 func AdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.GetString(CtxUserRole) != "admin" {
-			c.AbortWithStatusJSON(http.StatusForbidden, pkgerrors.Forbidden("admin privilege required"))
+			c.AbortWithStatusJSON(403, pkgerrors.Forbidden("admin privilege required"))
 			return
 		}
 		c.Next()
 	}
 }
 
-// MediaTokenAuth 用于媒体流端点：媒体元素无法设置 Authorization 头，
-// 故从 query 参数 token 读取并校验 JWT，并要求管理员权限。
+// 媒体凭证仅绑定一个资源，且每次读取都会复查账号和会话/密钥状态。
 func MediaTokenAuth(cfg config.Auth, db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tokenStr := c.Query("token")
-		if tokenStr == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("missing token"))
+		claims, err := session.Parse(cfg, c.Query("token"), "media")
+		if err != nil || claims.Resource != c.Request.URL.Path+"?"+mediaQuery(c) {
+			c.AbortWithStatusJSON(401, pkgerrors.Unauthorized("invalid media token"))
 			return
 		}
-		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (any, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, jwt.ErrSignatureInvalid
-			}
-			return []byte(cfg.JWTSecret), nil
-		})
-		if err != nil || !token.Valid {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("invalid token"))
+		u, err := session.User(db.WithContext(c.Request.Context()), claims)
+		if err != nil {
+			c.AbortWithStatusJSON(401, pkgerrors.Unauthorized("media access revoked"))
 			return
 		}
-		claims, _ := token.Claims.(jwt.MapClaims)
-		userID, _ := claims["user_id"].(string)
-		if userID == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("invalid token"))
+		if strings.Contains(c.Request.URL.Path, "bilibili") && u.Role != "admin" {
+			c.AbortWithStatus(403)
 			return
 		}
-		var user model.User
-		if err := db.Where("id = ? AND is_active = true", userID).First(&user).Error; err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("user not found"))
-			return
-		}
-		if user.Role != "admin" {
-			c.AbortWithStatusJSON(http.StatusForbidden, pkgerrors.Forbidden("admin privilege required"))
-			return
-		}
-		c.Set(CtxUserID, user.ID)
-		c.Set(CtxUserRole, user.Role)
+		c.Set(CtxUserID, u.ID)
+		c.Set(CtxUserRole, u.Role)
+		c.Set(CtxAPIKeyID, claims.APIKeyID)
+		c.Set("session_id", claims.SessionID)
+		c.Header("Cache-Control", "private, no-store")
+		c.Header("Referrer-Policy", "no-referrer")
 		c.Next()
 	}
 }
-
-// APIKeyAuthMiddleware 校验开放接口的 API 密钥（Authorization: Bearer / X-API-Key）。
+func mediaQuery(c *gin.Context) string { q := c.Request.URL.Query(); q.Del("token"); return q.Encode() }
 func APIKeyAuthMiddleware(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		plain := extractAPIKey(c)
-		if plain == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("missing api key"))
-			return
-		}
 		if !keys.HasValidPrefix(plain) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("invalid api key format"))
+			c.AbortWithStatusJSON(401, pkgerrors.Unauthorized("missing or invalid api key"))
 			return
 		}
-
-		var apiKey model.APIKey
-		if err := db.Where("key_hash = ?", keys.Hash(plain)).First(&apiKey).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("invalid api key"))
-				return
-			}
-			c.AbortWithStatusJSON(http.StatusInternalServerError, pkgerrors.Internal("failed to validate api key"))
+		var k model.APIKey
+		err := db.WithContext(c.Request.Context()).Where("key_hash = ? AND NOT is_revoked AND (expires_at IS NULL OR expires_at > now()) AND EXISTS (SELECT 1 FROM app_user u WHERE u.id = api_key.user_id AND u.is_active)", keys.Hash(plain)).First(&k).Error
+		if err != nil {
+			c.AbortWithStatusJSON(401, pkgerrors.Unauthorized("invalid, expired or disabled api key"))
 			return
 		}
-		if apiKey.IsRevoked {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("api key has been revoked"))
+		c.Set(CtxUserID, k.UserID)
+		c.Set(CtxAPIKeyID, k.ID)
+		rpm := 60
+		if k.RPMOverride != nil && *k.RPMOverride > 0 {
+			rpm = *k.RPMOverride
+		}
+		if !AllowRequest(c, db, "key:"+k.ID, rpm) {
 			return
 		}
-		if apiKey.ExpiresAt != nil && time.Now().After(*apiKey.ExpiresAt) {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, pkgerrors.Unauthorized("api key has expired"))
+		// 合并高频 last_used_at 更新，避免每次请求创建后台 goroutine。
+		if err := db.WithContext(c.Request.Context()).Model(&k).Where("last_used_at IS NULL OR last_used_at < now() - interval '1 minute'").Update("last_used_at", gorm.Expr("now()")).Error; err != nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, pkgerrors.Internal("failed to update key usage"))
 			return
 		}
-
-		c.Set(CtxUserID, apiKey.UserID)
-		c.Set(CtxAPIKeyID, apiKey.ID)
-
-		// 异步更新最后使用时间，不阻塞请求。
-		go func(id string) {
-			db.Model(&model.APIKey{}).Where("id = ?", id).Update("last_used_at", time.Now())
-		}(apiKey.ID)
-
 		c.Next()
 	}
 }
-
-// extractAPIKey 从 Authorization: Bearer 或 X-API-Key 头中提取密钥。
 func extractAPIKey(c *gin.Context) string {
-	if auth := c.GetHeader("Authorization"); auth != "" {
-		parts := strings.SplitN(auth, " ", 2)
-		if len(parts) == 2 && parts[0] == "Bearer" {
-			return parts[1]
-		}
+	if a := c.GetHeader("Authorization"); strings.HasPrefix(a, "Bearer ") {
+		return strings.TrimPrefix(a, "Bearer ")
 	}
-	if k := c.GetHeader("X-API-Key"); k != "" {
-		return k
-	}
-	return ""
+	return c.GetHeader("X-API-Key")
 }

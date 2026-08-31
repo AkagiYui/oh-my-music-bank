@@ -10,6 +10,7 @@ export const Route = createFileRoute('/admin')({
 const NAV: { to: string; label: string; exact?: boolean }[] = [
   { to: '/admin', label: '概览', exact: true },
   { to: '/admin/upload', label: '上传音频' },
+  { to: '/admin/jobs', label: '收录任务' },
   { to: '/admin/import', label: '哔哩哔哩导入' },
   { to: '/admin/tracks', label: '曲目' },
   { to: '/admin/artists', label: '艺术家' },

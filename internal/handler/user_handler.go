@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+	"gorm.io/gorm/clause"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -48,8 +50,8 @@ func (h *UserHandler) UpdateRole(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest(err.Error()))
 		return
 	}
-	if err := h.db.Model(&model.User{}).Where("id = ?", id).Update("role", req.Role).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to update role"))
+	if err := h.mutateUser(id, map[string]any{"role": req.Role}, false); err != nil {
+		c.JSON(http.StatusInternalServerError, pkgerrors.BadRequest(err.Error()))
 		return
 	}
 	response.NoContent(c)
@@ -65,8 +67,8 @@ func (h *UserHandler) ToggleActive(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest(err.Error()))
 		return
 	}
-	if err := h.db.Model(&model.User{}).Where("id = ?", id).Update("is_active", req.IsActive).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to update user"))
+	if err := h.mutateUser(id, map[string]any{"is_active": req.IsActive}, false); err != nil {
+		c.JSON(http.StatusInternalServerError, pkgerrors.BadRequest(err.Error()))
 		return
 	}
 	response.NoContent(c)
@@ -79,7 +81,7 @@ func (h *UserHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest("cannot delete yourself"))
 		return
 	}
-	if err := h.db.Where("id = ?", id).Delete(&model.User{}).Error; err != nil {
+	if err := h.mutateUser(id, nil, true); err != nil {
 		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to delete user"))
 		return
 	}
@@ -113,7 +115,7 @@ func (h *UserHandler) ChangeProfilePassword(c *gin.Context) {
 	userID := c.GetString(middleware.CtxUserID)
 	var req struct {
 		CurrentPassword string `json:"currentPassword" binding:"required"`
-		NewPassword     string `json:"newPassword"     binding:"required,min=8"`
+		NewPassword     string `json:"newPassword"     binding:"required,min=8,max=72"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest(err.Error()))
@@ -134,9 +136,54 @@ func (h *UserHandler) ChangeProfilePassword(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to hash password"))
 		return
 	}
-	if err := h.db.Model(&model.User{}).Where("id = ?", userID).Update("password_hash", string(hash)).Error; err != nil {
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		var current model.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", userID).First(&current).Error; err != nil {
+			return err
+		}
+		if current.PasswordHash != user.PasswordHash {
+			return errors.New("密码已变更，请重新登录")
+		}
+		if err := tx.Model(&current).Update("password_hash", string(hash)).Error; err != nil {
+			return err
+		}
+		return tx.Where("user_id = ?", userID).Delete(&model.AuthSession{}).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to update password"))
 		return
 	}
 	response.NoContent(c)
+}
+
+// 所有管理员变动共用事务锁，保证至少保留一位启用的管理员。
+func (h *UserHandler) mutateUser(id string, updates map[string]any, remove bool) error {
+	return h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(91120002)").Error; err != nil {
+			return err
+		}
+		var u model.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).First(&u).Error; err != nil {
+			return err
+		}
+		losesAdmin := remove || updates["role"] == "user" || updates["is_active"] == false
+		if u.Role == "admin" && u.IsActive && losesAdmin {
+			var n int64
+			if err := tx.Model(&model.User{}).Where("role = 'admin' AND is_active").Count(&n).Error; err != nil {
+				return err
+			}
+			if n <= 1 {
+				return errors.New("必须保留至少一位启用的管理员")
+			}
+		}
+		if remove {
+			return tx.Delete(&u).Error
+		}
+		if err := tx.Model(&u).Updates(updates).Error; err != nil {
+			return err
+		}
+		if updates["is_active"] == false {
+			return tx.Where("user_id = ?", id).Delete(&model.AuthSession{}).Error
+		}
+		return nil
+	})
 }

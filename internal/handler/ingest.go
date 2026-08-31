@@ -5,15 +5,20 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"github.com/akagiyui/oh-my-music-bank/internal/service/objectgc"
+	"github.com/akagiyui/oh-my-music-bank/internal/service/safefetch"
+	"github.com/google/uuid"
 	"io"
+	"mime"
 	"net/http"
 	"os"
-	"path"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/akagiyui/oh-my-music-bank/internal/model"
 	"github.com/akagiyui/oh-my-music-bank/internal/service/audiometa"
@@ -26,6 +31,7 @@ type ingestOptions struct {
 	Title    string
 	Artist   string
 	Source   string // 收录来源，如 upload / bilibili:BVxxx
+	TrackID  int64
 	CoverURL string // 远程封面地址（无内嵌封面时下载）
 }
 
@@ -37,6 +43,7 @@ func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store,
 	if err != nil {
 		return nil, false, err
 	}
+	reportJob(ctx, db, "校验文件与去重", 30)
 	hasher := sha256.New()
 	size, err := io.Copy(hasher, f)
 	f.Close()
@@ -50,38 +57,85 @@ func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store,
 	if err := db.Where("hash = ?", hash).First(&existing).Error; err == nil {
 		var t model.Track
 		if err := db.Where("id = ?", existing.TrackID).First(&t).Error; err == nil {
+			if opts.TrackID != 0 && opts.TrackID != t.ID {
+				return nil, false, fmt.Errorf("文件已属于曲目 %d，请使用合并功能", t.ID)
+			}
+			if err := completeJob(ctx, db, t.ID, true); err != nil {
+				return nil, false, err
+			}
 			return &t, true, nil
 		}
 	}
 
-	meta, _ := audiometa.Parse(filePath)
+	reportJob(ctx, db, "解析音轨与测量响度", 45)
+	meta, err := audiometa.Parse(ctx, filePath)
+	if err != nil {
+		return nil, false, err
+	}
 	title := firstNonEmpty(opts.Title, meta.Title, "未命名")
 	ext = strings.TrimPrefix(strings.ToLower(ext), ".")
 	if ext == "" {
 		ext = firstNonEmpty(meta.Format, "bin")
 	}
 
-	fileKey := fmt.Sprintf("audio/%s.%s", hash, ext)
+	reportJob(ctx, db, "保存音频与封面", 75)
+	fileKey := fmt.Sprintf("audio/%s.%s", uuid.NewString(), ext)
+	if err := objectgc.Schedule(db, fileKey, 24*time.Hour); err != nil {
+		return nil, false, err
+	}
 	up, err := os.Open(filePath)
 	if err != nil {
 		return nil, false, err
 	}
-	if err := store.Put(ctx, fileKey, up, size, "audio/"+ext); err != nil {
+	if err := store.Put(ctx, fileKey, up, size, mime.TypeByExtension("."+ext)); err != nil {
 		up.Close()
 		return nil, false, fmt.Errorf("上传对象存储失败: %w", err)
 	}
 	up.Close()
 
-	trackID := idgen.Next()
+	trackID := opts.TrackID
+	if trackID == 0 {
+		trackID = idgen.Next()
+	}
+	coverKey := ""
+	if opts.TrackID == 0 {
+		if meta.HasCover && len(meta.CoverData) > 0 {
+			if len(meta.CoverData) > 8<<20 {
+				return nil, false, fmt.Errorf("封面超过8MB")
+			}
+			coverKey = fmt.Sprintf("cover/%s.%s", uuid.NewString(), coverExtFromMime(meta.CoverMime))
+			if err := objectgc.Schedule(db, coverKey, 24*time.Hour); err != nil {
+				return nil, false, err
+			}
+			if err := store.Put(ctx, coverKey, bytes.NewReader(meta.CoverData), int64(len(meta.CoverData)), meta.CoverMime); err != nil {
+				return nil, false, err
+			}
+		} else if opts.CoverURL != "" {
+			var e error
+			coverKey, e = downloadCover(ctx, db, store, opts.CoverURL)
+			if e != nil {
+				return nil, false, e
+			}
+		}
+	}
 	source := opts.Source
-	err = db.Transaction(func(tx *gorm.DB) error {
+	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		track := model.Track{Title: title, Duration: meta.Duration, Available: true}
 		track.ID = trackID
+		if coverKey != "" {
+			track.CoverKey = &coverKey
+		}
 		if meta.Lyric != "" {
 			track.Lyric = &meta.Lyric
 		}
-		if err := tx.Create(&track).Error; err != nil {
-			return err
+		if opts.TrackID == 0 {
+			if err := tx.Create(&track).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", trackID).First(&track).Error; err != nil {
+				return err
+			}
 		}
 		origin := model.OriginAudio{
 			TrackID: trackID, Size: size, FileKey: fileKey, Hash: hash,
@@ -99,13 +153,14 @@ func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store,
 			Encoder: meta.Encoder, HasLyric: meta.Lyric != "", HasCover: meta.HasCover,
 			Loudness: meta.Loudness, QualityLabel: qualityLabel(meta.Bitrate, meta.BitDepth, meta.Format),
 		}
+
 		if source != "" {
 			audio.Source = &source
 		}
 		if err := tx.Create(&audio).Error; err != nil {
 			return err
 		}
-		if name := firstNonEmpty(opts.Artist, meta.Artist); name != "" {
+		if name := firstNonEmpty(opts.Artist, meta.Artist); opts.TrackID == 0 && name != "" {
 			artist, err := upsertArtist(tx, name)
 			if err != nil {
 				return err
@@ -114,39 +169,64 @@ func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store,
 				return err
 			}
 		}
-		return nil
+		if opts.TrackID == 0 && strings.TrimSpace(meta.Album) != "" {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?,0))", "album:"+meta.Album).Error; err != nil {
+				return err
+			}
+			var album model.Album
+			if err := tx.Where("title = ?", meta.Album).First(&album).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+				album.Title = meta.Album
+				if err = tx.Create(&album).Error; err != nil {
+					return err
+				}
+			} else if err != nil {
+				return err
+			}
+			if err := tx.Create(&model.TrackAlbum{TrackID: trackID, AlbumID: album.ID}).Error; err != nil {
+				return err
+			}
+		}
+		return completeJob(ctx, tx, trackID, false)
 	})
 	if err != nil {
-		go store.Remove(context.Background(), fileKey)
+		_ = objectgc.Schedule(db, fileKey, 0)
+		var found model.OriginAudio
+		if e := db.Where("hash = ?", hash).First(&found).Error; e == nil {
+			var t model.Track
+			if e = db.First(&t, found.TrackID).Error; e == nil {
+				if opts.TrackID != 0 && opts.TrackID != t.ID {
+					return nil, false, fmt.Errorf("文件已属于曲目 %d，请使用合并功能", t.ID)
+				}
+				if err := completeJob(ctx, db, t.ID, true); err != nil {
+					return nil, false, err
+				}
+				return &t, true, nil
+			}
+		}
 		return nil, false, fmt.Errorf("写库失败: %w", err)
 	}
 
 	// 封面：优先内嵌，其次远程下载。
-	if meta.HasCover && len(meta.CoverData) > 0 {
-		coverKey := fmt.Sprintf("cover/%d.%s", trackID, coverExtFromMime(meta.CoverMime))
-		if err := store.Put(ctx, coverKey, bytes.NewReader(meta.CoverData), int64(len(meta.CoverData)), meta.CoverMime); err == nil {
-			db.Model(&model.Track{}).Where("id = ?", trackID).Update("cover_key", coverKey)
-		}
-	} else if opts.CoverURL != "" {
-		if key, err := downloadCover(ctx, store, trackID, opts.CoverURL); err == nil {
-			db.Model(&model.Track{}).Where("id = ?", trackID).Update("cover_key", key)
-		}
-	}
-
 	var t model.Track
-	db.Where("id = ?", trackID).First(&t)
+	if err := db.Where("id = ?", trackID).First(&t).Error; err != nil {
+		return nil, false, err
+	}
 	return &t, false, nil
 }
 
 // downloadCover 下载远程封面到对象存储，返回 key。
-func downloadCover(ctx context.Context, store *objectstore.Store, trackID int64, coverURL string) (string, error) {
+func downloadCover(ctx context.Context, db *gorm.DB, store *objectstore.Store, coverURL string) (string, error) {
+	if err := safefetch.ValidateURL(coverURL); err != nil {
+		return "", err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, coverURL, nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 	req.Header.Set("Referer", "https://www.bilibili.com")
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := safefetch.Client()
+	defer client.CloseIdleConnections()
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
@@ -155,18 +235,22 @@ func downloadCover(ctx context.Context, store *objectstore.Store, trackID int64,
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("cover http %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, (8<<20)+1))
 	if err != nil {
 		return "", err
 	}
-	mime := resp.Header.Get("Content-Type")
+	if len(data) > 8<<20 {
+		return "", errors.New("封面超过 8MB")
+	}
+	mime := http.DetectContentType(data)
 	ext := coverExtFromMime(mime)
 	if ext == "img" {
-		if e := strings.TrimPrefix(strings.ToLower(path.Ext(coverURL)), "."); e != "" {
-			ext = e
-		}
+		return "", errors.New("封面必须为 JPEG、PNG 或 WebP 图片")
 	}
-	key := fmt.Sprintf("cover/%d.%s", trackID, ext)
+	key := fmt.Sprintf("cover/%s.%s", uuid.NewString(), ext)
+	if err := objectgc.Schedule(db, key, 24*time.Hour); err != nil {
+		return "", err
+	}
 	if err := store.Put(ctx, key, bytes.NewReader(data), int64(len(data)), mime); err != nil {
 		return "", err
 	}
@@ -175,6 +259,9 @@ func downloadCover(ctx context.Context, store *objectstore.Store, trackID int64,
 
 // upsertArtist 按名称查找艺术家，不存在则创建。
 func upsertArtist(tx *gorm.DB, name string) (*model.Artist, error) {
+	if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "artist:"+name).Error; err != nil {
+		return nil, err
+	}
 	var artist model.Artist
 	if err := tx.Where("name = ?", name).First(&artist).Error; err == nil {
 		return &artist, nil

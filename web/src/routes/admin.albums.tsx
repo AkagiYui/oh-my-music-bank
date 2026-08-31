@@ -1,3 +1,4 @@
+import { Pagination } from '../components/Pagination';
 /** 路由 `/admin/albums` —— 专辑管理（列表、新建、编辑标题/封面/艺术家）。 */
 import { For, Show, createEffect, createResource, createSignal } from 'solid-js';
 import { createFileRoute } from '@tanstack/solid-router';
@@ -14,12 +15,18 @@ export const Route = createFileRoute('/admin/albums')({
 
 const artistSearch = (q: string): Promise<Entity[]> =>
   api.admin.artists.list(q).then((r) => r.data.map((a) => ({ id: a.id, name: a.name })));
-const artistCreate = (name: string): Promise<Entity> => api.admin.artists.create(name).then((a) => ({ id: a.id, name: a.name }));
+const artistCreate = (name: string): Promise<Entity> =>
+  api.admin.artists.create(name).then((a) => ({ id: a.id, name: a.name }));
 
 function AlbumsPage() {
   const [q, setQ] = createSignal('');
   const [term, setTerm] = createSignal('');
-  const [list, { refetch }] = createResource(term, (t) => api.admin.albums.list(t).then((r) => r.data));
+  const [page, setPage] = createSignal(1);
+  const [paged, { refetch }] = createResource(
+    () => ({ term: term(), page: page() }),
+    (p) => api.admin.albums.list(p.term, p.page),
+  );
+  const list = () => paged()?.data;
   const [newTitle, setNewTitle] = createSignal('');
   const [editing, setEditing] = createSignal<string | null>(null);
 
@@ -46,6 +53,7 @@ function AlbumsPage() {
               class="flex flex-1 gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
+                setPage(1);
                 setTerm(q().trim());
               }}
             >
@@ -96,6 +104,13 @@ function AlbumsPage() {
               )}
             </For>
           </div>
+          <Pagination
+            page={page()}
+            total={paged()?.total ?? 0}
+            pageSize={50}
+            loading={paged.loading}
+            onPage={setPage}
+          />
         </CardContent>
       </Card>
     </div>
@@ -107,24 +122,39 @@ function AlbumEditor(props: { id: string; onRenamed: () => void }) {
   const [title, setTitle] = createSignal('');
   const [coverKey, setCoverKey] = createSignal('');
   const [artists, setArtists] = createSignal<Entity[]>([]);
+  const [order, setOrder] = createSignal<{ id: string; title: string; trackNo: number; discNo: number }[]>([]);
 
   createEffect(() => {
     const d = detail();
     if (d) {
       setTitle(d.title);
+      setOrder(
+        d.tracks.map((t, i) => ({
+          id: t.id,
+          title: t.title,
+          trackNo: t.trackNo ?? i + 1,
+          discNo: t.discNo ?? 1,
+        })),
+      );
       setCoverKey(d.coverKey ?? '');
       setArtists(d.artists.map((a) => ({ id: a.id, name: a.name })));
     }
   });
 
   async function save() {
-    await api.admin.albums.update(props.id, { title: title(), coverKey: coverKey() });
+    await api.admin.albums.update(props.id, {
+      title: title(),
+      coverKey: coverKey(),
+    });
     props.onRenamed();
     refetch();
   }
   async function changeArtists(items: Entity[]) {
     setArtists(items);
-    await api.admin.albums.setArtists(props.id, items.map((i) => i.id));
+    await api.admin.albums.setArtists(
+      props.id,
+      items.map((i) => i.id),
+    );
   }
 
   return (
@@ -143,7 +173,13 @@ function AlbumEditor(props: { id: string; onRenamed: () => void }) {
         保存
       </Button>
 
-      <EntityPicker label="艺术家" selected={artists()} search={artistSearch} onChange={changeArtists} allowCreate={artistCreate} />
+      <EntityPicker
+        label="艺术家"
+        selected={artists()}
+        search={artistSearch}
+        onChange={changeArtists}
+        allowCreate={artistCreate}
+      />
 
       <div class="space-y-1">
         <div class="text-sm font-medium">曲目（{detail()?.tracks.length ?? 0}）</div>
@@ -156,6 +192,47 @@ function AlbumEditor(props: { id: string; onRenamed: () => void }) {
             )}
           </For>
         </div>
+      </div>
+      <div class="space-y-2">
+        <p class="text-sm">编辑曲序与碟号</p>
+        <For each={order()}>
+          {(t, i) => (
+            <div class="flex items-center gap-2">
+              <span class="min-w-0 flex-1 truncate">{t.title}</span>
+              <Input
+                class="w-20"
+                type="number"
+                min="1"
+                aria-label="碟号"
+                value={t.discNo}
+                onInput={(e) => {
+                  const n = Number(e.currentTarget.value);
+                  setOrder((v) => v.map((x, k) => (k === i() ? { ...x, discNo: n } : x)));
+                }}
+              />
+              <Input
+                class="w-20"
+                type="number"
+                min="1"
+                aria-label="曲序"
+                value={t.trackNo}
+                onInput={(e) => {
+                  const n = Number(e.currentTarget.value);
+                  setOrder((v) => v.map((x, k) => (k === i() ? { ...x, trackNo: n } : x)));
+                }}
+              />
+            </div>
+          )}
+        </For>
+        <Button
+          size="sm"
+          onClick={async () => {
+            await api.admin.albums.orderTracks(props.id, order());
+            refetch();
+          }}
+        >
+          保存曲序
+        </Button>
       </div>
     </div>
   );

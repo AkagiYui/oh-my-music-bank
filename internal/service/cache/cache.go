@@ -88,3 +88,23 @@ func (m *Manager) StartBackgroundRefresh(interval time.Duration) {
 func (m *Manager) Stop() {
 	close(m.stop)
 }
+
+// 多字段配置一次提交，持久化成功后再刷新缓存。
+func (m *Manager) SetSettings(values map[string]string) error {
+	if err := m.db.Transaction(func(tx *gorm.DB) error {
+		for k, v := range values {
+			if err := tx.Save(&model.Setting{Key: k, Value: v}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k, v := range values {
+		m.settings[k] = v
+	}
+	return nil
+}

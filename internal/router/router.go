@@ -2,6 +2,7 @@
 package router
 
 import (
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -23,6 +24,7 @@ type SetupDeps struct {
 	Cache  *cache.Manager
 	Store  *objectstore.Store
 	Bili   *bilibili.Client
+	Jobs   *handler.Jobs
 }
 
 // Setup 初始化处理器、中间件并返回 gin 引擎。
@@ -45,6 +47,19 @@ func Setup(deps SetupDeps) *gin.Engine {
 
 	engine := gin.New()
 	engine.Use(gin.Recovery())
+	_ = engine.SetTrustedProxies(nil)
+	engine.Use(func(c *gin.Context) {
+		c.Set("media_auth", deps.Config.Auth)
+		c.Header("Referrer-Policy", "no-referrer")
+		c.Next()
+	})
+	engine.Use(func(c *gin.Context) {
+		limit := int64(1 << 20)
+		if strings.HasPrefix(c.GetHeader("Content-Type"), "multipart/form-data") {
+			limit = (int64(deps.Config.Upload.MaxSizeMB) << 20) + (1 << 20)
+		}
+		middleware.BodyLimit(limit)(c)
+	})
 	if deps.Config.Server.Debug {
 		engine.Use(gin.Logger())
 	}
@@ -55,14 +70,15 @@ func Setup(deps SetupDeps) *gin.Engine {
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	}))
 
 	// 开放接口：API Key 鉴权 + 调用日志。
 	open := engine.Group("/api/open/v1")
-	open.Use(middleware.APIKeyAuthMiddleware(deps.DB))
 	open.Use(middleware.APILogMiddleware(deps.DB))
+	open.Use(middleware.IPRateLimit(deps.DB, "open-ip:", 300))
+	open.Use(middleware.APIKeyAuthMiddleware(deps.DB))
 	{
 		open.GET("/search", publicHandler.Search)
 		open.GET("/tracks/:id", publicHandler.GetTrack)
@@ -73,6 +89,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 	{
 		pub.GET("/site", siteHandler.PublicConfig)
 		auth := pub.Group("/auth")
+		auth.Use(middleware.BodyLimit(1<<20), middleware.APILogMiddleware(deps.DB), middleware.IPRateLimit(deps.DB, "auth:", 20))
 		auth.POST("/register", authHandler.Register)
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/refresh", authHandler.Refresh)
@@ -83,6 +100,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 	authd.Use(middleware.WebAuthMiddleware(deps.Config.Auth, deps.DB))
 	{
 		authd.GET("/auth/me", authHandler.Me)
+		authd.POST("/auth/logout", authHandler.Logout)
 
 		ak := authd.Group("/api-keys")
 		{
@@ -110,6 +128,13 @@ func Setup(deps SetupDeps) *gin.Engine {
 			}
 
 			admin.GET("/logs", logHandler.List)
+			if deps.Jobs != nil {
+				admin.GET("/jobs", deps.Jobs.List)
+				admin.POST("/jobs/upload", deps.Jobs.Upload)
+				admin.POST("/jobs/bilibili", deps.Jobs.Bilibili)
+				admin.POST("/jobs/:id/cancel", deps.Jobs.Cancel)
+				admin.POST("/jobs/:id/retry", deps.Jobs.Retry)
+			}
 
 			users := admin.Group("/users")
 			{
@@ -129,6 +154,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 			tracks := admin.Group("/tracks")
 			{
 				tracks.GET("", trackHandler.List)
+				tracks.POST("/:id/merge", trackHandler.Merge)
 				tracks.GET("/:id", trackHandler.Detail)
 				tracks.PUT("/:id", trackHandler.Update)
 				tracks.DELETE("/:id", trackHandler.Delete)
@@ -143,6 +169,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 			artists := admin.Group("/artists")
 			{
 				artists.GET("", artistHandler.List)
+				artists.POST("/:id/merge", artistHandler.Merge)
 				artists.POST("", artistHandler.Create)
 				artists.GET("/:id", artistHandler.Detail)
 				artists.PUT("/:id", artistHandler.Update)
@@ -154,6 +181,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 			albums := admin.Group("/albums")
 			{
 				albums.GET("", albumHandler.List)
+				albums.PUT("/:id/tracks/order", albumHandler.OrderTracks)
 				albums.POST("", albumHandler.Create)
 				albums.GET("/:id", albumHandler.Detail)
 				albums.PUT("/:id", albumHandler.Update)
@@ -184,6 +212,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 			{
 				integrations.GET("", integrationsHandler.Get)
 				integrations.PUT("", integrationsHandler.Update)
+				integrations.POST("/test", integrationsHandler.Test)
 			}
 
 			meta := admin.Group("/metadata")
@@ -194,6 +223,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 
 			bili := admin.Group("/bilibili")
 			{
+				bili.POST("/media-token", handler.BiliMediaToken)
 				bili.GET("/status", bilibiliHandler.Status)
 				bili.GET("/favorites", bilibiliHandler.Favorites)
 				bili.GET("/favorites/:mediaId", bilibiliHandler.FavoriteItems)
@@ -208,5 +238,6 @@ func Setup(deps SetupDeps) *gin.Engine {
 	engine.GET("/api/v1/admin/bilibili/stream",
 		middleware.MediaTokenAuth(deps.Config.Auth, deps.DB), bilibiliHandler.Stream)
 
+	engine.GET("/api/v1/media/:kind/:id", middleware.MediaTokenAuth(deps.Config.Auth, deps.DB), handler.ServeMedia(deps.DB, deps.Store))
 	return engine
 }

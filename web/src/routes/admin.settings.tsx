@@ -16,17 +16,24 @@ function SettingsPage() {
   const [brandName, setBrandName] = createSignal('');
   const [regEnabled, setRegEnabled] = createSignal(true);
   const [saved, setSaved] = createSignal(false);
+  const [retention, setRetention] = createSignal(0);
 
   createEffect(() => {
     const s = settings();
     if (s) {
       setBrandName(s.brandName);
+      setRetention(Number(s.logRetentionDays));
       setRegEnabled(s.registrationEnabled);
     }
   });
 
   async function save() {
-    await api.admin.site.update({ brandName: brandName(), registrationEnabled: regEnabled() });
+    if (retention() > 0 && !confirm('保存后会永久删除超过保留天数的调用日志，确认启用？')) return;
+    await api.admin.site.update({
+      brandName: brandName(),
+      registrationEnabled: regEnabled(),
+      logRetentionDays: retention(),
+    });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -50,8 +57,19 @@ function SettingsPage() {
               checked={regEnabled()}
               onChange={(e) => setRegEnabled(e.currentTarget.checked)}
             />
-            开放注册（关闭后仅管理员可创建账号）
+            开放注册
           </label>
+          <div class="space-y-1">
+            <Label for="retention">调用日志保留天数（0 为永久保留）</Label>
+            <Input
+              id="retention"
+              type="number"
+              min="0"
+              max="3650"
+              value={retention()}
+              onInput={(e) => setRetention(Number(e.currentTarget.value))}
+            />
+          </div>
           <div class="flex items-center gap-3">
             <Button onClick={save}>保存</Button>
             <Show when={saved()}>

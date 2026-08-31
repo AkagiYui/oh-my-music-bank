@@ -57,6 +57,10 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 		return
 	}
 
+	if req.RPMOverride != nil {
+		c.JSON(403, pkgerrors.Forbidden("only administrators may change rate limits"))
+		return
+	}
 	plain, err := keys.Generate()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to generate key"))
@@ -70,7 +74,7 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 		KeyPrefix:   keys.DisplayPrefix(plain),
 		Description: req.Description,
 		ExpiresAt:   req.ExpiresAt,
-		RPMOverride: req.RPMOverride,
+		RPMOverride: nil,
 	}
 	if err := h.db.Create(&apiKey).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to create api key"))
@@ -108,7 +112,8 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 		updates["expires_at"] = *req.ExpiresAt
 	}
 	if req.RPMOverride != nil {
-		updates["rpm_override"] = *req.RPMOverride
+		c.JSON(http.StatusForbidden, pkgerrors.Forbidden("only administrators may change rate limits"))
+		return
 	}
 	if len(updates) == 0 {
 		response.NoContent(c)
@@ -187,6 +192,10 @@ func (h *APIKeyHandler) AdminUpdate(c *gin.Context) {
 		updates["expires_at"] = *req.ExpiresAt
 	}
 	if req.RPMOverride != nil {
+		if *req.RPMOverride < 1 || *req.RPMOverride > 10000 {
+			c.JSON(400, pkgerrors.BadRequest("rpmOverride must be 1..10000"))
+			return
+		}
 		updates["rpm_override"] = *req.RPMOverride
 	}
 	if req.IsRevoked != nil {
