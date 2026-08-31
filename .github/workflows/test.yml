@@ -23,10 +23,12 @@ jobs:
     env:
       OMMB_TEST_DSN: postgres://postgres:ommb-ci-test-only@127.0.0.1:5432/ommb_test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          # 与构建工作流一致，以完整依赖校验和作为缓存键。
+          cache-dependency-path: go.sum
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: go test -race ./... -count=1
       - run: go vet ./...
@@ -37,7 +39,7 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: voidzero-dev/setup-vp@v1.18.0
         with:
           working-directory: web
