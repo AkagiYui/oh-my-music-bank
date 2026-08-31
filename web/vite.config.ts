@@ -40,6 +40,19 @@ export default defineConfig({
     jsPlugins: [{ name: 'vite-plus', specifier: 'vite-plus/oxlint-plugin' }],
     rules: {
       'vite-plus/prefer-vite-plus-imports': 'error',
+      // 组件已迁移到 Base UI，阻止新增或复制组件时重新导入 Radix。
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['radix-ui', 'radix-ui/**', '@radix-ui/**'],
+              message:
+                '请使用 @base-ui/react 或现有 UI 封装；新增 shadcn 组件使用 components.json 中的 Base UI style。',
+            },
+          ],
+        },
+      ],
       // 保留查询回填编辑草稿的现有语义；本轮不引入 React Compiler 的额外渲染约束。
       'react/set-state-in-effect': 'off',
     },

@@ -168,7 +168,7 @@ function Dashboard() {
               value={email}
               onChange={(e) => setEmail(e.currentTarget.value)}
             />
-            <Button>修改邮箱</Button>
+            <Button type="submit">修改邮箱</Button>
           </form>
           <form
             className="flex flex-wrap gap-2"
@@ -197,7 +197,7 @@ function Dashboard() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.currentTarget.value)}
             />
-            <Button>修改密码</Button>
+            <Button type="submit">修改密码</Button>
           </form>
           {profileMessage ? (
             <>

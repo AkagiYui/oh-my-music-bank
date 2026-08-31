@@ -72,7 +72,9 @@ function UploadPage() {
           disabled={busy}
           onChange={(e) => setTarget(e.currentTarget.value)}
         />
-        <Button disabled={busy || !files.length}>{busy ? '正在上传…' : '上传并创建后台任务'}</Button>
+        <Button type="submit" disabled={busy || !files.length}>
+          {busy ? '正在上传…' : '上传并创建后台任务'}
+        </Button>
       </form>
       {messages.length ? (
         <>

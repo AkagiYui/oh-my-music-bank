@@ -47,7 +47,7 @@ function JobsPage() {
                   {new Date(j.createdAt).toLocaleString()} · 尝试 {j.attempts} 次
                 </span>
               </div>
-              <Progress className="h-2 w-full" value={j.progress} />
+              <Progress aria-label="收录进度" value={j.progress} />
               {j.trackId ? (
                 <>
                   <p className="text-sm">
