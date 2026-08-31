@@ -1,17 +1,22 @@
-# air 热重载配置示例（复制为 .air.toml）。
-# 安装：go install github.com/air-verse/air@latest
-# 使用：air
+# 本地开发直接使用此配置，无需复制或全局安装 Air。
+# 前后端一起启动：vp -C web run dev
+# 仅启动后端：vp -C web run dev:api
 
 root = "."
 tmp_dir = "tmp"
 
 [build]
 cmd = "go build -o ./tmp/server ./cmd/server"
-bin = "./tmp/server"
-include_ext = ["go"]
+entrypoint = ["./tmp/server"]
+# SQL 迁移通过 go:embed 编入程序，配置变化也需要重启以重新加载。
+include_ext = ["go", "sql", "yaml", "toml"]
+include_file = [".env", "go.mod", "go.sum"]
 exclude_dir = ["tmp", "web", ".git", ".github"]
 delay = 500
 stop_on_error = true
+# 留出服务优雅关闭的时间，避免热重载时直接中断正在处理的请求。
+send_interrupt = true
+kill_delay = "15s"
 
 [log]
 time = true

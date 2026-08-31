@@ -3,7 +3,7 @@
 自定义音源系统：管理员上传音频，系统自动解析信息并写库、上传至对象存储；用户凭 API Key 检索音乐与获取播放地址。
 
 - 后端：Go 1.27 + Gin + GORM + goose（启动时自动迁移）
-- 前端：SolidJS + TanStack Router（文件式路由）+ Vite + Tailwind v4 + Kobalte（纯 SPA）
+- 前端：React + TanStack Router（文件式路由）+ Vite+ + Tailwind v4 + shadcn/ui（纯 SPA）
 - 存储：PostgreSQL + S3 兼容对象存储（如雨云 RainS3）
 - 音频解析：`dhowden/tag`（内嵌标签）+ `ffprobe`（技术参数）
 
@@ -21,30 +21,43 @@ internal/
   service/cache/                # 站点设置缓存
   model/ middleware/ handler/ router/
 pkg/                            # response / errors / keys / idgen
-web/                            # SolidJS SPA（独立 pnpm 项目）
+web/                            # React SPA（独立 Vite+ 项目）
 Containerfile Caddyfile docker-entrypoint.sh docker-compose.yml
 .github/workflows/build.yml     # CI：构建检查 + 镜像构建推送
 ```
 
 ## 本地开发
 
-### 后端
+安装 Go 1.27+ 和 Vite+（`vp`），并准备 PostgreSQL 与 S3 兼容对象存储。
+首次开发时，在仓库根目录执行：
 
 ```bash
-cp .env.example .env        # 填入 DB / S3_* / FILE_PREFIX / JWT_SECRET
-go run ./cmd/server         # 启动时自动执行 goose 迁移，监听 :9111
+cp .env.example .env        # 填入 DB / S3_* / FILE_PREFIX，JWT_SECRET 至少 32 字节
+vp -C web install --frozen-lockfile
 ```
+
+运行 `openssl rand -hex 32` 生成随机密钥，将结果填入 `.env` 的 `JWT_SECRET`。
+已有 `.env` 也需要检查这一项；未设置或不足 32 字节时，后端会拒绝启动。
+密钥应持久保存，修改后需要重新登录。不要将 `.env` 提交到仓库。
+
+之后只需一个命令，同时启动前后端：
+
+```bash
+vp -C web run dev
+```
+
+在 `web/` 目录下可直接执行 `vp run dev`。访问 `http://localhost:5173`，
+前端的 `/api` 和 `/health` 请求代理到后端 `:9111`。前端保留热更新，
+后端通过 Air 在 Go 代码、SQL 迁移或配置变化时自动重新编译并重启。
+按 `Ctrl+C` 结束开发任务。首次运行会由 Go 下载固定版本的 Air，无需额外全局安装。
+
+启动任务统一维护在 `web/vite.config.ts`，直接复用 `.air.toml.example`，无需复制配置。
+`vp dev` 是 Vite+ 内置的前端开发命令；同时启动两端请使用 `vp run dev`。
+需要分别调试时，可使用 `vp -C web dev`（仅前端）或 `vp -C web run dev:api`（仅后端）。
+如果修改后端监听端口，也需要同步调整 `web/vite.config.ts` 中的代理目标。
 
 数据库结构由 `internal/storage/db/migrations` 下的 goose 迁移维护，**服务启动时自动应用**
 （带 advisory lock 防多实例并发）。改表请新增迁移文件，勿用 GORM AutoMigrate。
-
-### 前端
-
-```bash
-cd web
-pnpm install
-pnpm dev                    # 监听 :5173，/api 代理到 :9111
-```
 
 ## 接口概览
 

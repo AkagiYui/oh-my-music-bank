@@ -1,7 +1,7 @@
 name: Regression tests
 on:
-  push:
-  pull_request:
+  # 仅由入口工作流调用，避免同一次推送重复执行测试。
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          # 与构建工作流一致，以完整依赖校验和作为缓存键。
+          # 以完整依赖校验和作为缓存键，依赖变化时刷新缓存。
           cache-dependency-path: go.sum
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: go test -race ./... -count=1

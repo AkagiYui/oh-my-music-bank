@@ -6,7 +6,6 @@
   "type": "module",
   "description": "Oh My Music Bank 前端 —— React 单页应用",
   "scripts": {
-    "dev": "vp dev",
     "build": "vp build",
     "preview": "vp preview",
     "typecheck": "vp check --no-fmt --no-lint",
