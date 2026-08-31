@@ -60,7 +60,7 @@ func Xfyun(ctx context.Context, creds XfyunCreds, audio []byte) ([]Candidate, er
 	checksum := hex.EncodeToString(sum[:])
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"https://webqbh.xfyun.cn/v1/service/v1/qbh", bytes.NewReader(audio))
+		xfyunEndpoint, bytes.NewReader(audio))
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func Xfyun(ctx context.Context, creds XfyunCreds, audio []byte) ([]Candidate, er
 	req.Header.Set("X-CheckSum", checksum)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
 
-	resp, err := httpClient.Do(req)
+	resp, err := xfyunHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
