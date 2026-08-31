@@ -7,7 +7,7 @@ export const Route = createFileRoute('/admin')({
 
 // 系统管理仅保留账户、访问控制和站点配置；音乐业务统一从曲库管理进入。
 const NAV: ManagementNavItem[] = [
-  { to: '/admin', label: '系统概览', exact: true },
+  { to: '/admin', label: '概览', exact: true },
   { to: '/admin/api-keys', label: 'API Key' },
   { to: '/admin/logs', label: '调用日志' },
   { to: '/admin/users', label: '用户' },

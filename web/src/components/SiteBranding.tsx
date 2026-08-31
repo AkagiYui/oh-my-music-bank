@@ -46,7 +46,7 @@ const pageTitles: Record<string, string> = {
   '/register': '注册',
   '/search': '搜索音乐',
   '/dashboard': '控制台',
-  '/admin': '系统概览',
+  '/admin': '概览',
   '/music': '概览',
   '/admin/settings': '站点设置',
   '/admin/integrations': '集成',

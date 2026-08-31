@@ -42,7 +42,7 @@ function Overview() {
   });
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">系统概览</h1>
+      <h1 className="text-2xl font-semibold">概览</h1>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard label="用户" value={stats?.users} sub={`今日新增 ${stats?.newUsersToday ?? 0}`} />

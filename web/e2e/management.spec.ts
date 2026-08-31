@@ -13,9 +13,9 @@ const musicPages = [
 test('曲库和系统管理独立导航、统计与页面标题', async ({ page }) => {
   const app = await mockApp(page);
   await page.goto('/admin');
-  await expect(page.getByRole('heading', { name: '系统概览', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '概览', exact: true })).toBeVisible();
   const systemNav = page.getByRole('navigation', { name: '系统管理', exact: true });
-  await expect(systemNav.getByRole('link')).toHaveText(['系统概览', 'API Key', '调用日志', '用户', '站点设置', '集成']);
+  await expect(systemNav.getByRole('link')).toHaveText(['概览', 'API Key', '调用日志', '用户', '站点设置', '集成']);
   await expect(page.getByRole('main').getByText('分发音频', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('main').getByText('近 30 天 API 调用量')).toBeVisible();
 
@@ -42,7 +42,7 @@ test('曲库和系统管理独立导航、统计与页面标题', async ({ page 
     await expect(musicNav.getByRole('link', { name: '概览', exact: true })).not.toHaveAttribute('aria-current');
   }
   await page.getByRole('banner').getByRole('link', { name: '系统管理', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '系统概览', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '概览', exact: true })).toBeVisible();
   app.assertNoErrors();
 });
 

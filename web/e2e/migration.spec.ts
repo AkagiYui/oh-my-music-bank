@@ -7,7 +7,7 @@ test('所有页面在生产构建中正常渲染，浏览器无 React 错误', a
     ['/', '自定义音源系统'],
     ['/search', '搜索音乐'],
     ['/dashboard', '账号设置'],
-    ['/admin', '系统概览'],
+    ['/admin', '概览'],
     ['/music', '概览'],
     ['/music/upload', '批量上传音频'],
     ['/music/jobs', '收录任务'],
@@ -42,7 +42,7 @@ test('匿名管理入口不加载管理数据，登录和退出更新权限', as
   await page.getByLabel('密码').fill('test-password');
   await page.getByRole('button', { name: '登录', exact: true }).last().click();
   await expect(page).toHaveURL(/\/admin$/);
-  await expect(page.getByRole('heading', { name: '系统概览', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '概览', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '退出', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   expect(await page.evaluate(() => localStorage.getItem('ommb.access'))).toBeNull();
