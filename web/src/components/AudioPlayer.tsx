@@ -1,3 +1,4 @@
+import { notifyError } from '../lib/feedback';
 import { useEffect, useRef, useState } from 'react';
 import { LoaderCircle, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { Button } from './ui/button';
@@ -22,7 +23,6 @@ function PlayerSession({ sources, title }: { sources: PlayerSource[]; title?: st
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [cur, setCur] = useState(0);
   const [dur, setDur] = useState(0);
   const [vol, setVol] = useState(1);
@@ -43,7 +43,6 @@ function PlayerSession({ sources, title }: { sources: PlayerSource[]; title?: st
       else audio.removeAttribute('src');
       audio.load();
       setLoading(false);
-      setError('');
     }
   }, [url]);
   useEffect(() => {
@@ -62,7 +61,7 @@ function PlayerSession({ sources, title }: { sources: PlayerSource[]; title?: st
     void audio.play().catch(() => {
       if (audioRef.current === audio && audio.getAttribute('src') === requested) {
         setLoading(false);
-        setError('无法播放音频，请检查网络或更换音质');
+        notifyError('无法播放音频，请检查网络或更换音质');
       }
     });
   }
@@ -96,14 +95,9 @@ function PlayerSession({ sources, title }: { sources: PlayerSource[]; title?: st
         onError={() => {
           setLoading(false);
           setPlaying(false);
-          setError('音频加载失败：可能已下架、凭证过期或格式不受支持，请刷新详情后重试');
+          notifyError('音频加载失败：可能已下架、凭证过期或格式不受支持，请刷新详情后重试');
         }}
       />
-      {error && (
-        <p role="alert" className="mb-2 text-sm text-destructive">
-          {error}
-        </p>
-      )}
       {title && <div className="mb-2 truncate text-sm font-medium">{title}</div>}
       <div className="flex items-center gap-3">
         <Button

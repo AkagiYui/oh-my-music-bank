@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
 import { render, fireEvent, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { AudioPlayer } from './AudioPlayer';
+import { Feedback } from './Feedback';
 
 describe('AudioPlayer', () => {
   beforeEach(() => {
@@ -57,10 +58,15 @@ describe('AudioPlayer', () => {
   });
   it('播放错误和被拒绝的 play 请求显示反馈', async () => {
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(new Error('blocked'));
-    const screen = render(<AudioPlayer sources={[{ id: 'a', url: '/a.wav', label: 'A' }]} />);
+    const screen = render(
+      <>
+        <Feedback />
+        <AudioPlayer sources={[{ id: 'a', url: '/a.wav', label: 'A' }]} />
+      </>,
+    );
     fireEvent.click(screen.getByRole('button', { name: '播放' }));
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('无法播放'));
+    await waitFor(() => expect(screen.getByText('操作失败').parentElement!.textContent).toContain('无法播放'));
     fireEvent.error(screen.container.querySelector('audio')!);
-    expect(screen.getByRole('alert').textContent).toContain('音频加载失败');
+    await waitFor(() => expect(screen.getByText('操作失败').parentElement!.textContent).toContain('音频加载失败'));
   });
 });

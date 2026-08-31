@@ -1,4 +1,5 @@
 /** 与后端通信的 API 客户端：JWT 令牌管理、自动刷新、统一错误处理。 */
+import { notifyError } from './feedback';
 
 const ACCESS_KEY = 'ommb.access';
 const REFRESH_KEY = 'ommb.refresh';
@@ -92,11 +93,7 @@ async function request(path: string, init: RequestInit = {}, auth = false): Prom
   try {
     return await parseResponse(res);
   } catch (err) {
-    window.dispatchEvent(
-      new CustomEvent('ommb:api-error', {
-        detail: err instanceof Error ? err.message : String(err),
-      }),
-    );
+    notifyError(err);
     throw err;
   }
 }

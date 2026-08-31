@@ -3,6 +3,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { useRef, useState, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link } from '@tanstack/react-router';
+import { clearFeedback, notifyError } from '../lib/feedback';
 import { api, type BiliMedia, type BiliVideoInfo, type RecognizeCandidate } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -40,7 +41,6 @@ function ImportPage() {
   const [cands, setCands] = useState<RecognizeCandidate[] | null>(null);
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
   const page = () => video?.pages.find((p) => p.cid === cid);
   const duration = () => page()?.duration ?? 0;
   const { data: streamUrl, isFetching: streamUrlLoading } = useQuery({
@@ -51,7 +51,7 @@ function ImportPage() {
   async function openFolder(id: number, pn = 1) {
     const token = ++folderRequest.current;
     setFolderId(id);
-    setErr('');
+    clearFeedback();
     try {
       const r = await api.admin.bilibili.favoriteItems(id, pn);
       if (token !== folderRequest.current) return;
@@ -61,19 +61,19 @@ function ImportPage() {
       setSelected([]);
     } catch (e) {
       if (token !== folderRequest.current) return;
-      setErr(String(e));
+      notifyError(e);
     }
   }
   async function openVideo(bvid: string) {
     const token = ++videoRequest.current;
-    setErr('');
-    setMsg('');
-    setVideo(null);
-    setCands(null);
+    clearFeedback();
     try {
       const info = await api.admin.bilibili.resolve(bvid.trim());
       if (token !== videoRequest.current) return;
       if (!info.pages.length) throw new Error('视频没有可用分 P');
+      // 新视频加载成功后再替换内容，失败时保留当前裁剪状态。
+      setMsg('');
+      setCands(null);
       setVideo(info);
       const p = info.pages[0];
       setCid(p.cid);
@@ -83,7 +83,7 @@ function ImportPage() {
       setArtist(info.owner);
     } catch (e) {
       if (token !== videoRequest.current) return;
-      setErr(String(e));
+      notifyError(e);
     }
   }
   function selectPage(c: number) {
@@ -95,7 +95,7 @@ function ImportPage() {
     if (!video) return;
     setBusy('ingest');
     setMsg('');
-    setErr('');
+    clearFeedback();
     try {
       const body: {
         bvid: string;
@@ -117,7 +117,7 @@ function ImportPage() {
       await api.admin.jobs.bilibili([{ ...body, trackId: target.trim() }]);
       setMsg('已加入后台任务，可在收录任务中查看进度');
     } catch (e) {
-      setErr(String(e));
+      notifyError(e);
     } finally {
       setBusy('');
     }
@@ -125,8 +125,7 @@ function ImportPage() {
   async function recognize() {
     if (!video) return;
     setBusy('recognize');
-    setErr('');
-    setCands(null);
+    clearFeedback();
     try {
       const r = await api.admin.bilibili.recognize({
         bvid: video!.bvid,
@@ -138,7 +137,7 @@ function ImportPage() {
       setCands(r);
       if (r.length === 0) setMsg('未识别出结果，可调整片段重试');
     } catch (e) {
-      setErr(String(e));
+      notifyError(e);
     } finally {
       setBusy('');
     }
@@ -210,7 +209,7 @@ function ImportPage() {
                   disabled={!selected.length || busy !== ''}
                   onClick={async () => {
                     setBusy('batch');
-                    setErr('');
+                    clearFeedback();
                     try {
                       const tasks: Record<string, unknown>[] = [];
                       for (const bvid of selected) {
@@ -227,7 +226,7 @@ function ImportPage() {
                       setSelected([]);
                       setMsg(`已提交 ${tasks.length} 个分 P 收录任务`);
                     } catch (e) {
-                      setErr(String(e));
+                      notifyError(e);
                     } finally {
                       setBusy('');
                     }
@@ -363,11 +362,6 @@ function ImportPage() {
                 {msg ? (
                   <>
                     <p className="text-sm text-green-600">{msg}</p>
-                  </>
-                ) : null}
-                {err ? (
-                  <>
-                    <p className="text-sm text-destructive">{err}</p>
                   </>
                 ) : null}
 

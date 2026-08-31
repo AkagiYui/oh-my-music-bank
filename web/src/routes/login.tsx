@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { ApiError } from '../lib/api';
+import { clearFeedback, notifyError } from '../lib/feedback';
 import { login } from '../stores/auth';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -13,17 +13,16 @@ function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
+    clearFeedback();
     setLoading(true);
     try {
       const u = await login(email, password);
       void navigate({ to: u.role === 'admin' ? '/admin' : '/dashboard' });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
+      notifyError(err);
     } finally {
       setLoading(false);
     }
@@ -50,11 +49,6 @@ function LoginPage() {
                 onChange={(e) => setPassword(e.currentTarget.value)}
               />
             </div>
-            {error ? (
-              <>
-                <p className="text-sm text-destructive">{error}</p>
-              </>
-            ) : null}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? '登录中…' : '登录'}
             </Button>

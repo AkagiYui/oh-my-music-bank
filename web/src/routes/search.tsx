@@ -1,3 +1,4 @@
+import { clearFeedback, notifyError } from '../lib/feedback';
 import { useRef, useState, Fragment } from 'react';
 import { Pagination } from '../components/Pagination';
 import { TrackFilters } from '../components/TrackFilters';
@@ -24,16 +25,14 @@ function SearchPage() {
   const [results, setResults] = useState<TrackDTO[]>([]);
   const [selected, setSelected] = useState<TrackDTO | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   async function doSearch(e?: React.FormEvent, nextPage = 1) {
     const token = ++searchRequest.current;
     ++detailRequest.current;
     e?.preventDefault();
-    setError('');
-    setSelected(null);
+    clearFeedback();
     const key = apiKey.trim();
     if (!key) {
-      setError('请先填写 API Key（可在控制台创建）');
+      notifyError('请先填写 API Key（可在控制台创建）');
       return;
     }
     if (!q.trim() && !Object.values(filters).some(Boolean)) return;
@@ -45,24 +44,25 @@ function SearchPage() {
       setPage(nextPage);
       setTotal(res.total);
       setResults(res.data);
-      if (res.data.length === 0) setError('没有找到相关曲目');
+      setSelected(null);
+      if (res.data.length === 0) notifyError('没有找到相关曲目');
     } catch (err) {
       if (token !== searchRequest.current) return;
-      setError(err instanceof ApiError ? `${err.status} ${err.message}` : String(err));
-      setResults([]);
+      notifyError(err instanceof ApiError ? `${err.status} ${err.message}` : String(err));
+      // 请求失败保留已有结果和详情，提示错误时不让下方内容突然消失。
     } finally {
       if (token === searchRequest.current) setLoading(false);
     }
   }
   async function openDetail(t: TrackDTO) {
     const token = ++detailRequest.current;
-    setError('');
+    clearFeedback();
     try {
       const detail = await api.open.getTrack(apiKey.trim(), t.id);
       if (token === detailRequest.current) setSelected(detail);
     } catch (err) {
       if (token !== detailRequest.current) return;
-      setError(err instanceof ApiError ? err.message : String(err));
+      notifyError(err);
     }
   }
   const artistNames = (t: TrackDTO) => t.artists.map((a) => a.name).join(' / ') || '未知艺术家';
@@ -88,17 +88,10 @@ function SearchPage() {
           <TrackFilters value={filters} onChange={setFilters} />
           <form className="flex gap-2" onSubmit={doSearch}>
             <Input placeholder="输入歌名 / 别名，如 告白气球" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" className="w-24 shrink-0" disabled={loading}>
               {loading ? '搜索中…' : '搜索'}
             </Button>
           </form>
-          {error ? (
-            <>
-              <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
-                {error}
-              </p>
-            </>
-          ) : null}
         </CardContent>
       </Card>
 

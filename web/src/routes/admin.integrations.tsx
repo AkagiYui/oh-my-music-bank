@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { api } from '../lib/api';
+import { clearFeedback, notifyError } from '../lib/feedback';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -23,12 +24,12 @@ function IntegrationsPage() {
   const [testMessage, setTestMessage] = useState('');
   async function test(provider: string) {
     setTesting(true);
-    setTestMessage('');
+    clearFeedback();
     try {
       const r = await api.admin.integrations.test(provider);
       setTestMessage(r.message);
     } catch (e) {
-      setTestMessage(String(e));
+      notifyError(e);
     } finally {
       setTesting(false);
     }

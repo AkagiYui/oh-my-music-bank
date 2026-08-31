@@ -1,31 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { notifyError } from '../lib/feedback';
+import { Toaster } from './ui/sonner';
+
 export function Feedback() {
-  const [message, setMessage] = useState('');
   useEffect(() => {
-    const apiError = (event: Event) => setMessage((event as CustomEvent<string>).detail);
+    // 后台界面动作的未捕获异常也交给 Sonner，避免静默失败。
     const unhandled = (event: PromiseRejectionEvent) => {
-      setMessage(event.reason instanceof Error ? event.reason.message : String(event.reason));
+      notifyError(event.reason);
       event.preventDefault();
     };
-    window.addEventListener('ommb:api-error', apiError);
-    // 显式后台执行的界面动作若失败，仍统一显示错误，避免静默丢失。
     window.addEventListener('unhandledrejection', unhandled);
-    return () => {
-      window.removeEventListener('ommb:api-error', apiError);
-      window.removeEventListener('unhandledrejection', unhandled);
-    };
+    return () => window.removeEventListener('unhandledrejection', unhandled);
   }, []);
-  return message ? (
-    <>
-      <div
-        role="alert"
-        className="mx-auto flex max-w-5xl items-center gap-3 rounded border border-destructive bg-background p-3 text-sm text-destructive"
-      >
-        <span>{message}</span>
-        <button className="ml-auto" onClick={() => setMessage('')}>
-          关闭
-        </button>
-      </div>
-    </>
-  ) : null;
+
+  return (
+    <Toaster
+      position="bottom-right"
+      closeButton
+      richColors
+      containerAriaLabel="通知"
+      offset={24}
+      mobileOffset={16}
+      toastOptions={{
+        closeButtonAriaLabel: '关闭错误提示',
+        classNames: { toast: 'items-start!', content: 'min-w-0 flex-1' },
+      }}
+    />
+  );
 }

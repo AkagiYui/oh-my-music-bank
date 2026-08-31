@@ -1,3 +1,4 @@
+import { notifyError } from '../lib/feedback';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { formatDuration } from '../lib/utils';
@@ -21,7 +22,6 @@ function CropperSession(props: CropperProps) {
   const [cur, setCur] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [metaDur, setMetaDur] = useState(0);
-  const [error, setError] = useState('');
   const dur = metaDur || props.duration || 1;
   const gap = Math.min(0.5, dur);
   const pct = (v: number) => `${clamp(v / dur, 0, 1) * 100}%`;
@@ -32,7 +32,11 @@ function CropperSession(props: CropperProps) {
     };
   }, []);
   function play() {
-    void audioRef.current!.play().catch(() => setError('试听失败，请刷新视频或检查网络'));
+    const audio = audioRef.current!;
+    void audio.play().catch(() => {
+      // 换源或关闭裁剪器后，旧播放请求不再向全局浮层发送错误。
+      if (audioRef.current === audio) notifyError('试听失败，请刷新视频或检查网络');
+    });
   }
   function timeAt(clientX: number) {
     const rect = barRef.current!.getBoundingClientRect();
@@ -73,13 +77,8 @@ function CropperSession(props: CropperProps) {
         }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onError={() => setError('音频加载失败，请刷新视频后重试')}
+        onError={() => notifyError('音频加载失败，请刷新视频后重试')}
       />
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
       <div
         ref={barRef}
         className="relative h-10 cursor-pointer touch-none select-none rounded-md border bg-muted"

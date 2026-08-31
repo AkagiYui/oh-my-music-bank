@@ -1,8 +1,9 @@
+import { clearFeedback, notifyError } from '../lib/feedback';
 import { useEffect, useState, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Pagination } from '../components/Pagination';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { api, ApiError } from '../lib/api';
+import { api } from '../lib/api';
 import { loadSession, useAuth } from '../stores/auth';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -29,7 +30,6 @@ function Dashboard() {
   const keys = () => paged?.data;
   const [name, setName] = useState('');
   const [created, setCreated] = useState<string | null>(null);
-  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -37,7 +37,7 @@ function Dashboard() {
   const [profileMessage, setProfileMessage] = useState('');
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
+    clearFeedback();
     setBusy(true);
     try {
       const res = await api.apiKeys.create({ name: name.trim() || '未命名' });
@@ -45,7 +45,7 @@ function Dashboard() {
       setName('');
       void refetch();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
+      notifyError(err);
     } finally {
       setBusy(false);
     }
@@ -70,11 +70,6 @@ function Dashboard() {
               创建
             </Button>
           </form>
-          {error ? (
-            <>
-              <p className="text-sm text-destructive">{error}</p>
-            </>
-          ) : null}
           {created ? (
             <>
               <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
