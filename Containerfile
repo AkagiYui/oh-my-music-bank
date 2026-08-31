@@ -28,6 +28,8 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY pkg/ ./pkg/
 RUN CGO_ENABLED=0 go build -o /app/server ./cmd/server
+# 维护工具随镜像分发，忘记密码时无需在容器中安装 Go。
+RUN CGO_ENABLED=0 go build -o /app/ommb ./cmd/cli
 
 # ---- Stage 3a: External DB（外部数据库 + 外部对象存储）----
 FROM alpine:3 AS external-db
@@ -35,6 +37,7 @@ FROM alpine:3 AS external-db
 RUN apk add --no-cache caddy ca-certificates tzdata ffmpeg bash
 COPY --from=frontend-builder /app/web/dist /usr/share/caddy
 COPY --from=backend-builder /app/server /usr/local/bin/server
+COPY --from=backend-builder /app/ommb /usr/local/bin/ommb
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
@@ -48,6 +51,7 @@ RUN apk add --no-cache \
     caddy ca-certificates tzdata ffmpeg su-exec bash
 COPY --from=frontend-builder /app/web/dist /usr/share/caddy
 COPY --from=backend-builder /app/server /usr/local/bin/server
+COPY --from=backend-builder /app/ommb /usr/local/bin/ommb
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

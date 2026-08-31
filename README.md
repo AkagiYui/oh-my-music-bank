@@ -12,6 +12,7 @@
 ```
 schema.sql                      # 修订后的完整参考 schema（人工查阅/手动初始化）
 cmd/server/                     # 服务入口
+cmd/cli/                        # 维护命令行工具（ommb）
 internal/
   config/                       # 配置加载（env > config.yaml > 默认值）
   storage/db/                   # GORM 连接 + goose 迁移（//go:embed）
@@ -72,6 +73,43 @@ vp -C web run dev
 管理员的用户管理、曲目管理、音频上传（`POST /api/v1/admin/audio/upload`，multipart `file`）。
 
 首个注册的账号自动成为管理员。
+
+## 重置忘记的密码
+
+服务器维护者可以通过 `cmd/cli` 提供的 `reset-password` action，按注册邮箱重置任意账号的密码：
+
+```bash
+go run ./cmd/cli reset-password --email admin@example.com
+```
+
+命令会隐藏输入，要求输入并确认新密码（至少 8 个字符、最多 72 字节）。
+无需旧密码；成功后撤销该用户的全部登录会话，原有访问令牌和刷新令牌失效。
+账号角色、启用状态、音乐及 API Key 保持不变；禁用的账号重置后仍需管理员启用。
+
+工具复用服务端的数据库配置来源：环境变量 > `config.yaml` > 默认值，
+同时加载**当前工作目录**的 `.env`；只需数据库配置，不依赖 JWT 密钥或 S3。
+可用 `--config /path/to/config.yaml` 指定配置文件，但不会改变 `.env` 的查找目录。
+执行前请确认指向正确的数据库。工具不会创建用户或自动执行数据库迁移，
+应对已由服务端完成迁移的数据库运行；任何一步写入失败均在同一事务内回滚。
+
+镜像内置 `ommb` 命令。使用外部数据库的 Compose 部署在更新镜像后可直接执行：
+
+```bash
+docker compose exec app ommb reset-password --email admin@example.com
+```
+
+使用 all-in-one 镜像时，`docker exec` 不会继承入口脚本临时导出的 `DB`，
+需显式提供指向内嵌 PostgreSQL 的数据库配置（Unix socket 为 `/run/postgresql`）。
+
+自动化场景可加 `--password-stdin` 从标准输入读取单行密码（读取到 EOF，允许末尾 LF/CRLF），
+此模式不做二次确认。请通过权限受限的文件或秘密管理工具提供输入，
+不要把明文密码写进命令参数、shell 历史或提交到仓库。例如：
+
+```bash
+go run ./cmd/cli reset-password --email admin@example.com --password-stdin < /secure/new-password
+go run ./cmd/cli --help
+go run ./cmd/cli reset-password --help
+```
 
 ## 部署
 

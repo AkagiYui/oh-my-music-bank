@@ -123,6 +123,46 @@ var envBindings = map[string][]string{
 
 // Load 从配置文件和环境变量加载应用配置。
 func Load(configPath string) (*Config, error) {
+	cfg, err := load(configPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(strings.TrimSpace(cfg.Auth.JWTSecret)) < 32 {
+		return nil, fmt.Errorf("auth.jwt_secret must contain at least 32 bytes")
+	}
+	if cfg.Upload.MaxSizeMB < 1 || cfg.Upload.MaxSizeMB > 2048 {
+		return nil, fmt.Errorf("upload.max_size_mb must be between 1 and 2048")
+	}
+	if err := validateDatabase(cfg.Database); err != nil {
+		return nil, err
+	}
+	if _, err := cfg.Auth.AccessTokenDuration(); err != nil {
+		return nil, err
+	}
+	if _, err := cfg.Auth.RefreshTokenDuration(); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+// LoadDatabase 供维护命令复用配置来源，无需提供 JWT 或对象存储配置。
+func LoadDatabase(configPath string) (Database, error) {
+	cfg, err := load(configPath)
+	if err != nil {
+		return Database{}, err
+	}
+	return cfg.Database, validateDatabase(cfg.Database)
+}
+
+func validateDatabase(cfg Database) error {
+	if strings.TrimSpace(cfg.DSN) == "" {
+		return fmt.Errorf("database dsn is required (set env DB or OMMB_DATABASE_DSN)")
+	}
+	return nil
+}
+
+// load 统一解析配置，具体入口仅校验自身需要的字段。
+func load(configPath string) (*Config, error) {
 	// 静默加载 .env（不存在则忽略）。
 	_ = godotenv.Load()
 
@@ -156,22 +196,6 @@ func Load(configPath string) (*Config, error) {
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
-	}
-
-	if len(strings.TrimSpace(cfg.Auth.JWTSecret)) < 32 {
-		return nil, fmt.Errorf("auth.jwt_secret must contain at least 32 bytes")
-	}
-	if cfg.Upload.MaxSizeMB < 1 || cfg.Upload.MaxSizeMB > 2048 {
-		return nil, fmt.Errorf("upload.max_size_mb must be between 1 and 2048")
-	}
-	if cfg.Database.DSN == "" {
-		return nil, fmt.Errorf("database dsn is required (set env DB or OMMB_DATABASE_DSN)")
-	}
-	if _, err := cfg.Auth.AccessTokenDuration(); err != nil {
-		return nil, err
-	}
-	if _, err := cfg.Auth.RefreshTokenDuration(); err != nil {
-		return nil, err
 	}
 
 	return &cfg, nil

@@ -13,6 +13,7 @@ require (
 	github.com/pressly/goose/v3 v3.27.1
 	github.com/spf13/viper v1.21.0
 	golang.org/x/crypto v0.50.0
+	golang.org/x/term v0.42.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
 )
