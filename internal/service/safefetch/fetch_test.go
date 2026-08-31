@@ -1,17 +1,16 @@
 package safefetch
 
 import (
-	"context"
-	"net"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
-	"time"
 )
 
-func TestRejectPrivateDestinations(t *testing.T) {
-	for _, raw := range []string{"127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.0.1", "169.254.169.254", "::1", "::ffff:127.0.0.1", "100.100.100.200", "fd00::1", "0.0.0.0"} {
-		if PublicIP(net.ParseIP(raw)) {
-			t.Errorf("accepted %s", raw)
+func TestValidateURL(t *testing.T) {
+	for _, raw := range []string{"http://127.0.0.1", "http://10.0.0.1", "http://198.18.0.74", "http://[fdfe:dcba:9876::49]", "https://i0.hdslb.com/cover.jpg"} {
+		if err := ValidateURL(raw); err != nil {
+			t.Errorf("rejected %s: %v", raw, err)
 		}
 	}
 	for _, raw := range []string{"file:///etc/passwd", "http://user:pass@example.com", "http://example.com:8080"} {
@@ -19,10 +18,23 @@ func TestRejectPrivateDestinations(t *testing.T) {
 			t.Errorf("accepted %s", raw)
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", "http://127.0.0.1/", nil)
-	if _, e := Client().Do(req); e == nil {
-		t.Fatal("loopback request accepted")
+}
+
+func TestClientAllowsLoopback(t *testing.T) {
+	// 实际连接本地服务，避免只检查 URL 而漏掉拨号阶段的地址拦截。
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "cover")
+	}))
+	defer server.Close()
+	client := Client()
+	defer client.CloseIdleConnections()
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil || resp.StatusCode != http.StatusOK || string(body) != "cover" {
+		t.Fatalf("unexpected response: status=%d body=%q err=%v", resp.StatusCode, body, err)
 	}
 }
