@@ -28,7 +28,7 @@ export function SiteHeader() {
         </Link>
         <nav className="flex items-center gap-1 text-sm">
           <NavLink to="/">首页</NavLink>
-          <NavLink to="/search">试搜</NavLink>
+          <NavLink to="/search">搜索</NavLink>
         </nav>
         <div className="ml-auto flex flex-wrap items-center gap-2 text-sm">
           {user ? (

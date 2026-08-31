@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 const dict = {
   zh: {
     home: '首页',
-    search: '试搜',
+    search: '搜索',
     docs: 'API 文档',
     dashboard: '控制台',
     admin: '管理',

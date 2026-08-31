@@ -44,7 +44,7 @@ export function BrandLogo({ url }: { url: string }) {
 const pageTitles: Record<string, string> = {
   '/login': '登录',
   '/register': '注册',
-  '/search': '试搜音乐',
+  '/search': '搜索音乐',
   '/dashboard': '控制台',
   '/admin': '系统概览',
   '/music': '曲库概览',

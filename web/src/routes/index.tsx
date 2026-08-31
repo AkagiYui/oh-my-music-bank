@@ -1,6 +1,7 @@
 import { useSiteConfig } from '../components/SiteBranding';
 import { CodeBlock } from '../components/CodeBlock';
 import { resolveAPIOrigin } from '../lib/site';
+import { useAuth } from '../stores/auth';
 import { Badge } from '../components/ui/badge';
 import { Fragment } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
@@ -33,6 +34,14 @@ function Step(props: { n: number; title: string; children: React.ReactNode }) {
 function Home() {
   const navigate = useNavigate();
   const site = useSiteConfig();
+  const { isAuthenticated } = useAuth();
+  // 已登录用户直接前往控制台，未登录用户沿用站点的注册开关。
+  const apiKeyTarget = isAuthenticated ? '/dashboard' : site.registrationEnabled ? '/register' : '/login';
+  const apiKeyLabel = isAuthenticated
+    ? '前往控制台获取 API Key'
+    : site.registrationEnabled
+      ? '注册获取 API Key'
+      : '登录获取 API Key';
   const apiOrigin = resolveAPIOrigin(site.apiOrigin);
   return (
     <div className="space-y-10">
@@ -44,9 +53,9 @@ function Home() {
           </p>
         )}
         <div className="flex justify-center gap-3">
-          <Button onClick={() => navigate({ to: '/search' })}>立即试搜</Button>
-          <Button variant="outline" onClick={() => navigate({ to: site.registrationEnabled ? '/register' : '/login' })}>
-            {site.registrationEnabled ? '注册获取 API Key' : '登录获取 API Key'}
+          <Button onClick={() => navigate({ to: '/search' })}>立即搜索</Button>
+          <Button variant="outline" onClick={() => navigate({ to: apiKeyTarget })}>
+            {apiKeyLabel}
           </Button>
         </div>
       </section>

@@ -19,7 +19,7 @@ const KEY_STORAGE = 'ommb.tryKey';
 function SearchPage() {
   const site = useSiteConfig();
   const apiOrigin = resolveAPIOrigin(site.apiOrigin);
-  // API 来源变化时清空旧结果与播放器，避免把不同部署的数据混在同一轮试搜中。
+  // API 来源变化时清空旧结果与播放器，避免把不同部署的数据混在同一轮搜索中。
   return <SearchContent key={apiOrigin} apiOrigin={apiOrigin} />;
 }
 function SearchContent({ apiOrigin }: { apiOrigin: string }) {
@@ -77,7 +77,7 @@ function SearchContent({ apiOrigin }: { apiOrigin: string }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">试搜音乐</h1>
+        <h1 className="text-2xl font-semibold">搜索音乐</h1>
         <p className="text-sm text-muted-foreground">这里直接调用开放接口，体验 API 的真实返回。</p>
         <p className="text-xs text-muted-foreground wrap-anywhere">请求地址：{apiOrigin}/api/open/v1</p>
       </div>

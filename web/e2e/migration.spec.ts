@@ -5,7 +5,7 @@ test('所有页面在生产构建中正常渲染，浏览器无 React 错误', a
   const app = await mockApp(page);
   for (const [path, text] of [
     ['/', '自定义音源系统'],
-    ['/search', '试搜音乐'],
+    ['/search', '搜索音乐'],
     ['/dashboard', '账号设置'],
     ['/admin', '系统概览'],
     ['/music', '曲库概览'],

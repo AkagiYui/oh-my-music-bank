@@ -24,7 +24,7 @@ describe('API 来源', () => {
       expect(() => resolveAPIOrigin(value, 'https://music.example.test')).toThrow();
     }
   });
-  it('试搜与媒体使用 API 来源，不泄漏登录令牌、Cookie 或跟随重定向', async () => {
+  it('搜索与媒体使用 API 来源，不泄漏登录令牌、Cookie 或跟随重定向', async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: [], total: 0 })))

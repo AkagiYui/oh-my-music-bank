@@ -74,7 +74,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// 开放接口：API Key 鉴权 + 调用日志。
+	// 仅搜索与曲目详情记录调用日志；日志中间件先于限流和鉴权，保留失败请求。
 	open := engine.Group("/api/open/v1")
 	open.Use(middleware.APILogMiddleware(deps.DB))
 	open.Use(middleware.IPRateLimit(deps.DB, "open-ip:", 300))
@@ -89,7 +89,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 	{
 		pub.GET("/site", siteHandler.PublicConfig)
 		auth := pub.Group("/auth")
-		auth.Use(middleware.BodyLimit(1<<20), middleware.APILogMiddleware(deps.DB), middleware.IPRateLimit(deps.DB, "auth:", 20))
+		auth.Use(middleware.BodyLimit(1<<20), middleware.IPRateLimit(deps.DB, "auth:", 20))
 		auth.POST("/register", authHandler.Register)
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/refresh", authHandler.Refresh)

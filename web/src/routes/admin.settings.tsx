@@ -196,7 +196,7 @@ function SettingsEditor({ initial }: { initial: SiteSettings }) {
         <Card>
           <CardHeader>
             <CardTitle>开放 API</CardTitle>
-            <CardDescription>同时影响接入示例和试搜请求；登录、管理与配置接口仍保持同源。</CardDescription>
+            <CardDescription>同时影响接入示例和搜索请求；登录、管理与配置接口仍保持同源。</CardDescription>
           </CardHeader>
           <CardContent>
             <FieldGroup>

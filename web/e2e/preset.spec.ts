@@ -35,7 +35,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     for (const [path, text] of [
       ['/', '自定义音源系统'],
-      ['/search', '试搜音乐'],
+      ['/search', '搜索音乐'],
       ['/dashboard', '账号设置'],
       ['/admin', '系统概览'],
       ['/music', '曲库概览'],

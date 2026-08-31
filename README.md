@@ -64,10 +64,10 @@ vp -C web run dev
 
 开放接口（API Key 鉴权，请求头 `X-API-Key: omb_…` 或 `Authorization: Bearer omb_…`）：
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/open/v1/search?q=` | 按标题/别名搜索可用曲目 |
-| GET | `/api/open/v1/tracks/{id}` | 曲目详情 + 各音质音频地址 |
+| 方法 | 路径                       | 说明                      |
+| ---- | -------------------------- | ------------------------- |
+| GET  | `/api/open/v1/search?q=`   | 按标题/别名搜索可用曲目   |
+| GET  | `/api/open/v1/tracks/{id}` | 曲目详情 + 各音质音频地址 |
 
 管理与账户接口（JWT 鉴权，`/api/v1/...`）：注册/登录/刷新、API Key 自助管理、
 管理员的用户管理、曲目管理、音频上传（`POST /api/v1/admin/audio/upload`，multipart `file`）。
@@ -131,14 +131,14 @@ Logo、图标与页脚链接接受 HTTPS 地址或 `/branding/logo.svg` 这样�
 
 API 独立域名填写完整来源，例如 `https://api.example.com:8443`，不包含 `/api`、查询参数、
 片段或凭据。留空时由浏览器读取 `window.location.origin`，保留当前协议、域名和端口；
-表单显示的占位地址不会写回数据库。独立域名同时用于首页 cURL 示例及试搜的真实请求，
+表单显示的占位地址不会写回数据库。独立域名同时用于首页 cURL 示例及搜索的真实请求，
 签名音频的相对路径也从该 API 来源解析。登录、管理及公开站点配置接口继续走前端同源的
 `/api/v1/...` 反向代理，域名配置错误时仍能进入管理后台修正。
 
 独立 API 域名需由部署者预先完成 DNS、HTTPS 和反向代理，连接到同一后端服务与数据库，
-至少放行 `/api/open/v1/*` 和 `/api/v1/media/*`。跨域试搜需允许前端来源的 CORS 请求及
+至少放行 `/api/open/v1/*` 和 `/api/v1/media/*`。跨域搜索需允许前端来源的 CORS 请求及
 `X-API-Key` 请求头（服务当前已允许无 Cookie 的跨域请求；外层网关也需放行 OPTIONS）。
-试搜不会向独立 API 发送网页登录 JWT 或浏览器 Cookie，也不会跟随重定向转发 API Key。
+搜索不会向独立 API 发送网页登录 JWT 或浏览器 Cookie，也不会跟随重定向转发 API Key。
 API 域名应直接返回响应；HTTPS 前端不能配置 HTTP API。
 品牌设置只保存应用配置，不会自动创建 DNS、证书或网关规则，也不会改变 S3 文件域名。
 
