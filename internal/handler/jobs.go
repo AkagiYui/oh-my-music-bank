@@ -228,8 +228,13 @@ func (j *Jobs) Retry(c *gin.Context) {
 func (j *Jobs) process(parent context.Context) {
 	var job model.IngestJob
 	err := j.db.WithContext(parent).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).Where("status='queued' OR (status='processing' AND lease_until < now())").Order("created_at").First(&job).Error; err != nil {
-			return err
+		// 空队列是正常状态，使用 Find 避免产生 record not found 错误日志；保留原有排序。
+		result := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).Where("status='queued' OR (status='processing' AND lease_until < now())").Order("created_at").Order("id").Limit(1).Find(&job)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return nil
 		}
 		if job.CancelRequested {
 			job.RunID = nil
