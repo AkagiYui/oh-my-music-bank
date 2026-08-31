@@ -1,6 +1,7 @@
 import { Badge } from '../components/ui/badge';
 import { useState, useEffect, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { invalidateMusicQueries } from '../lib/query-invalidation';
 import { Pagination } from '../components/Pagination';
 import { createFileRoute } from '@tanstack/react-router';
 import { api } from '../lib/api';
@@ -15,16 +16,15 @@ export const Route = createFileRoute('/admin/albums')({
 const artistSearch = (q: string): Promise<Entity[]> =>
   api.admin.artists.list(q).then((r) => r.data.map((a) => ({ id: a.id, name: a.name })));
 const artistCreate = (name: string): Promise<Entity> =>
-  api.admin.artists.create(name).then((a) => ({ id: a.id, name: a.name }));
+  api.admin.artists.create(name).then((a) => {
+    void invalidateMusicQueries();
+    return { id: a.id, name: a.name };
+  });
 function AlbumsPage() {
   const [q, setQ] = useState('');
   const [term, setTerm] = useState('');
   const [page, setPage] = useState(1);
-  const {
-    data: paged,
-    isFetching: pagedLoading,
-    refetch,
-  } = useQuery({
+  const { data: paged, isLoading: pagedLoading } = useQuery({
     queryKey: ['admin.albums:paged', { term: term, page: page }],
     queryFn: () => api.admin.albums.list(term, page),
   });
@@ -35,13 +35,13 @@ function AlbumsPage() {
     if (!newTitle.trim()) return;
     await api.admin.albums.create(newTitle.trim());
     setNewTitle('');
-    void refetch();
+    void invalidateMusicQueries();
   }
   async function remove(id: string) {
     if (!confirm('删除该专辑？')) return;
     await api.admin.albums.remove(id);
     if (editing === id) setEditing(null);
-    void refetch();
+    void invalidateMusicQueries();
   }
   return (
     <div className="space-y-4">
@@ -103,7 +103,7 @@ function AlbumsPage() {
                     {editing === a.id ? (
                       <>
                         <div className="border-t bg-muted/30 p-4">
-                          <AlbumEditor id={a.id} onRenamed={refetch} />
+                          <AlbumEditor id={a.id} onRenamed={invalidateMusicQueries} />
                         </div>
                       </>
                     ) : null}
@@ -166,6 +166,7 @@ function AlbumEditor(props: { id: string; onRenamed: () => void }) {
       props.id,
       items.map((i) => i.id),
     );
+    void invalidateMusicQueries();
   }
   return (
     <div className="space-y-4">
@@ -242,6 +243,7 @@ function AlbumEditor(props: { id: string; onRenamed: () => void }) {
           size="sm"
           onClick={async () => {
             await api.admin.albums.orderTracks(props.id, order);
+            void invalidateMusicQueries();
             void refetch();
           }}
         >

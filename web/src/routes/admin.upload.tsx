@@ -1,3 +1,4 @@
+import { invalidateJobQueries } from '../lib/query-invalidation';
 import { useRef, useState, Fragment } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { api } from '../lib/api';
@@ -29,6 +30,7 @@ function UploadPage() {
             artist: artist.trim(),
             trackId: target.trim(),
           });
+          void invalidateJobQueries();
           setMessages((m) => [...m, `${file.name}：已进入任务 ${j.id}`]);
         } catch (err) {
           failed.push(file);

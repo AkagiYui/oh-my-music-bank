@@ -1,6 +1,7 @@
 import { NativeSelect } from '../components/ui/native-select';
 import { useState, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { invalidateUserQueries } from '../lib/query-invalidation';
 import { Pagination } from '../components/Pagination';
 import { createFileRoute } from '@tanstack/react-router';
 import { api } from '../lib/api';
@@ -11,11 +12,7 @@ export const Route = createFileRoute('/admin/users')({
 });
 function UsersPage() {
   const [page, setPage] = useState(1);
-  const {
-    data: paged,
-    isFetching: pagedLoading,
-    refetch,
-  } = useQuery({
+  const { data: paged, isLoading: pagedLoading } = useQuery({
     queryKey: ['admin.users:paged', page],
     queryFn: () => api.admin.users.list(page),
   });
@@ -38,7 +35,9 @@ function UsersPage() {
                       <div className="ml-auto flex items-center gap-2">
                         <NativeSelect
                           value={u.role}
-                          onChange={(e) => api.admin.users.setRole(u.id, e.currentTarget.value).then(() => refetch())}
+                          onChange={(e) =>
+                            api.admin.users.setRole(u.id, e.currentTarget.value).then(() => invalidateUserQueries())
+                          }
                         >
                           <option value="user">user</option>
                           <option value="admin">admin</option>
@@ -46,7 +45,9 @@ function UsersPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => api.admin.users.toggleActive(u.id, !u.isActive).then(() => refetch())}
+                          onClick={() =>
+                            api.admin.users.toggleActive(u.id, !u.isActive).then(() => invalidateUserQueries())
+                          }
                         >
                           {u.isActive ? '禁用' : '启用'}
                         </Button>
@@ -54,7 +55,8 @@ function UsersPage() {
                           size="sm"
                           variant="ghost"
                           onClick={() =>
-                            confirm('确认删除该用户？') && api.admin.users.remove(u.id).then(() => refetch())
+                            confirm('确认删除该用户？') &&
+                            api.admin.users.remove(u.id).then(() => invalidateUserQueries())
                           }
                         >
                           删除

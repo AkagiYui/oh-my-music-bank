@@ -46,10 +46,12 @@ function BarChart(props: { data: TimeseriesPoint[]; field: 'requests' | 'registr
 function Overview() {
   const { data: stats } = useQuery({
     queryKey: ['admin.index:stats'],
+    staleTime: 30_000,
     queryFn: () => api.admin.stats.overview(),
   });
   const { data: series } = useQuery({
     queryKey: ['admin.index:series'],
+    staleTime: 30_000,
     queryFn: () => api.admin.stats.timeseries(30),
   });
   return (

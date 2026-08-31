@@ -13,6 +13,7 @@ function LogsPage() {
   const [status, setStatus] = useState('');
   const { data: resp } = useQuery({
     queryKey: ['admin.logs:resp', { page: page, status: status }],
+    staleTime: 30_000,
     queryFn: () => api.admin.logs.list({ page, statusCode: status ? Number(status) : undefined }),
   });
   const totalPages = () => {

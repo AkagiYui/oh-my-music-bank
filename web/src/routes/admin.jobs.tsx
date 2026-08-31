@@ -2,6 +2,7 @@ import { Badge } from '../components/ui/badge';
 import { Progress } from '../components/ui/progress';
 import { useState, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { invalidateJobQueries } from '../lib/query-invalidation';
 import { createFileRoute } from '@tanstack/react-router';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -9,12 +10,9 @@ import { Pagination } from '../components/Pagination';
 export const Route = createFileRoute('/admin/jobs')({ component: JobsPage });
 function JobsPage() {
   const [page, setPage] = useState(1);
-  const {
-    data: jobs,
-    isFetching: jobsLoading,
-    refetch,
-  } = useQuery({
+  const { data: jobs, isLoading: jobsLoading } = useQuery({
     queryKey: ['admin.jobs:jobs', page],
+    staleTime: 3_000,
     refetchInterval: 3000,
     queryFn: () => api.admin.jobs.list(page),
   });
@@ -23,7 +21,7 @@ function JobsPage() {
     setBusy(id);
     try {
       await (retry ? api.admin.jobs.retry(id) : api.admin.jobs.cancel(id));
-      await refetch();
+      await invalidateJobQueries();
     } finally {
       setBusy('');
     }

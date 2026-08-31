@@ -1,6 +1,7 @@
 import { Badge } from '../components/ui/badge';
 import { useState, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { invalidateApiKeyQueries } from '../lib/query-invalidation';
 import { CheckIcon } from 'lucide-react';
 import { Pagination } from '../components/Pagination';
 import { createFileRoute } from '@tanstack/react-router';
@@ -15,11 +16,7 @@ function ApiKeysPage() {
   const [q, setQ] = useState('');
   const [term, setTerm] = useState('');
   const [page, setPage] = useState(1);
-  const {
-    data: paged,
-    isFetching: pagedLoading,
-    refetch,
-  } = useQuery({
+  const { data: paged, isLoading: pagedLoading } = useQuery({
     queryKey: ['admin.api-keys:paged', { term: term, page: page }],
     queryFn: () => api.admin.apiKeys.list(term, page),
   });
@@ -76,7 +73,7 @@ function ApiKeysPage() {
                               const rpm = Number(e.currentTarget.value);
                               if (rpm === (k.rpmOverride ?? 60)) return;
                               await api.admin.apiKeys.update(k.id, { rpmOverride: rpm });
-                              void refetch();
+                              void invalidateApiKeyQueries();
                             }}
                           />
                         </label>
@@ -94,7 +91,9 @@ function ApiKeysPage() {
                           size="sm"
                           variant="ghost"
                           onClick={() =>
-                            api.admin.apiKeys.update(k.id, { isRevoked: !k.isRevoked }).then(() => refetch())
+                            api.admin.apiKeys
+                              .update(k.id, { isRevoked: !k.isRevoked })
+                              .then(() => invalidateApiKeyQueries())
                           }
                         >
                           {k.isRevoked ? '恢复' : '撤销'}
@@ -103,7 +102,8 @@ function ApiKeysPage() {
                           size="sm"
                           variant="ghost"
                           onClick={() =>
-                            confirm('确认删除该 API Key？') && api.admin.apiKeys.remove(k.id).then(() => refetch())
+                            confirm('确认删除该 API Key？') &&
+                            api.admin.apiKeys.remove(k.id).then(() => invalidateApiKeyQueries())
                           }
                         >
                           删除

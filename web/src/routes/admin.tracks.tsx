@@ -2,6 +2,7 @@ import { Badge } from '../components/ui/badge';
 import { Checkbox } from '../components/ui/checkbox';
 import { useState, useEffect, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { invalidateMusicQueries } from '../lib/query-invalidation';
 import { CheckIcon } from 'lucide-react';
 import { TrackFilters } from '../components/TrackFilters';
 import { Pagination } from '../components/Pagination';
@@ -20,22 +21,24 @@ export const Route = createFileRoute('/admin/tracks')({
 const artistSearch = (q: string): Promise<Entity[]> =>
   api.admin.artists.list(q).then((r) => r.data.map((a) => ({ id: a.id, name: a.name })));
 const artistCreate = (name: string): Promise<Entity> =>
-  api.admin.artists.create(name).then((a) => ({ id: a.id, name: a.name }));
+  api.admin.artists.create(name).then((a) => {
+    void invalidateMusicQueries();
+    return { id: a.id, name: a.name };
+  });
 const albumSearch = (q: string): Promise<Entity[]> =>
   api.admin.albums.list(q).then((r) => r.data.map((a) => ({ id: a.id, name: a.title })));
 const albumCreate = (name: string): Promise<Entity> =>
-  api.admin.albums.create(name).then((a) => ({ id: a.id, name: a.title }));
+  api.admin.albums.create(name).then((a) => {
+    void invalidateMusicQueries();
+    return { id: a.id, name: a.title };
+  });
 function TracksPage() {
   const [q, setQ] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [term, setTerm] = useState('');
   const [page, setPage] = useState(1);
-  const {
-    data: paged,
-    isFetching: pagedLoading,
-    refetch,
-  } = useQuery({
+  const { data: paged, isLoading: pagedLoading } = useQuery({
     queryKey: ['admin.tracks:paged', { term: term, page: page, filters: activeFilters }],
     queryFn: () => api.admin.tracks.list(term, page, activeFilters),
   });
@@ -45,7 +48,7 @@ function TracksPage() {
     if (!confirm('确认删除该曲目？相关音频与对象也会被清理。')) return;
     await api.admin.tracks.remove(id);
     if (editing === id) setEditing(null);
-    void refetch();
+    void invalidateMusicQueries();
   }
   return (
     <div className="space-y-4">
@@ -109,7 +112,7 @@ function TracksPage() {
                     {editing === t.id ? (
                       <>
                         <div className="border-t bg-muted/30 p-4">
-                          <TrackEditor id={t.id} onChanged={refetch} />
+                          <TrackEditor id={t.id} onChanged={invalidateMusicQueries} />
                         </div>
                       </>
                     ) : null}
@@ -213,11 +216,13 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
   async function addAlias() {
     if (!aliasInput.trim()) return;
     await api.admin.tracks.addAlias(props.id, aliasInput.trim());
+    void invalidateMusicQueries();
     setAliasInput('');
     void refetch();
   }
   async function delAlias(aid: string) {
     await api.admin.tracks.deleteAlias(props.id, aid);
+    void invalidateMusicQueries();
     void refetch();
   }
   async function changeArtists(items: Entity[]) {
@@ -226,6 +231,7 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
       props.id,
       items.map((i) => i.id),
     );
+    void invalidateMusicQueries();
   }
   async function changeAlbums(items: Entity[]) {
     setAlbums(items);
@@ -233,15 +239,18 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
       props.id,
       items.map((i) => i.id),
     );
+    void invalidateMusicQueries();
   }
   async function toggleLang(id: number, checked: boolean) {
     const next = checked ? [...langIds, id] : langIds.filter((x) => x !== id);
     setLangIds(next);
     await api.admin.tracks.setLanguages(props.id, next);
+    void invalidateMusicQueries();
   }
   async function delAudio(aid: string) {
     if (!confirm('删除该音质音频？')) return;
     await api.admin.audio.remove(aid);
+    void invalidateMusicQueries();
     void refetch();
   }
   return (

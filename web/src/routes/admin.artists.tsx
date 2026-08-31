@@ -2,6 +2,7 @@ import { Badge } from '../components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { useState, useEffect, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { invalidateMusicQueries } from '../lib/query-invalidation';
 import { Pagination } from '../components/Pagination';
 import { createFileRoute } from '@tanstack/react-router';
 import { api } from '../lib/api';
@@ -15,11 +16,7 @@ function ArtistsPage() {
   const [q, setQ] = useState('');
   const [term, setTerm] = useState('');
   const [page, setPage] = useState(1);
-  const {
-    data: paged,
-    isFetching: pagedLoading,
-    refetch,
-  } = useQuery({
+  const { data: paged, isLoading: pagedLoading } = useQuery({
     queryKey: ['admin.artists:paged', { term: term, page: page }],
     queryFn: () => api.admin.artists.list(term, page),
   });
@@ -30,13 +27,13 @@ function ArtistsPage() {
     if (!newName.trim()) return;
     await api.admin.artists.create(newName.trim());
     setNewName('');
-    void refetch();
+    void invalidateMusicQueries();
   }
   async function remove(id: string) {
     if (!confirm('删除该艺术家？')) return;
     await api.admin.artists.remove(id);
     if (editing === id) setEditing(null);
-    void refetch();
+    void invalidateMusicQueries();
   }
   return (
     <div className="space-y-4">
@@ -96,7 +93,7 @@ function ArtistsPage() {
                     {editing === a.id ? (
                       <>
                         <div className="border-t bg-muted/30 p-4">
-                          <ArtistEditor id={a.id} onRenamed={refetch} />
+                          <ArtistEditor id={a.id} onRenamed={invalidateMusicQueries} />
                         </div>
                       </>
                     ) : null}
@@ -140,11 +137,13 @@ function ArtistEditor(props: { id: string; onRenamed: () => void }) {
   async function addAlias() {
     if (!aliasInput.trim()) return;
     await api.admin.artists.addAlias(props.id, aliasInput.trim());
+    void invalidateMusicQueries();
     setAliasInput('');
     void refetch();
   }
   async function delAlias(aid: string) {
     await api.admin.artists.deleteAlias(props.id, aid);
+    void invalidateMusicQueries();
     void refetch();
   }
   return (

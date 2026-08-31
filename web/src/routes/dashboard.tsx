@@ -2,6 +2,7 @@ import { Badge } from '../components/ui/badge';
 import { clearFeedback, notifyError } from '../lib/feedback';
 import { useEffect, useState, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { invalidateApiKeyQueries, invalidateUserQueries } from '../lib/query-invalidation';
 import { CheckIcon } from 'lucide-react';
 import { Pagination } from '../components/Pagination';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
@@ -20,11 +21,7 @@ function Dashboard() {
     if (ready && !isAuthenticated) void navigate({ to: '/login' });
   }, [ready, isAuthenticated, navigate]);
   const [page, setPage] = useState(1);
-  const {
-    data: paged,
-    isFetching: pagedLoading,
-    refetch,
-  } = useQuery({
+  const { data: paged, isLoading: pagedLoading } = useQuery({
     queryKey: ['dashboard:paged', page],
     enabled: ready && isAuthenticated,
     queryFn: () => api.apiKeys.list(page),
@@ -45,7 +42,7 @@ function Dashboard() {
       const res = await api.apiKeys.create({ name: name.trim() || '未命名' });
       setCreated(res.key);
       setName('');
-      void refetch();
+      void invalidateApiKeyQueries();
     } catch (err) {
       notifyError(err);
     } finally {
@@ -125,7 +122,7 @@ function Dashboard() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => api.apiKeys.revoke(k.id).then(() => refetch())}
+                              onClick={() => api.apiKeys.revoke(k.id).then(() => invalidateApiKeyQueries())}
                             >
                               撤销
                             </Button>
@@ -134,7 +131,7 @@ function Dashboard() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => api.apiKeys.remove(k.id).then(() => refetch())}
+                          onClick={() => api.apiKeys.remove(k.id).then(() => invalidateApiKeyQueries())}
                         >
                           删除
                         </Button>
@@ -160,6 +157,7 @@ function Dashboard() {
             onSubmit={async (e) => {
               e.preventDefault();
               await api.profile.email(email);
+              void invalidateUserQueries();
               void loadSession();
               setProfileMessage('邮箱已更新');
             }}

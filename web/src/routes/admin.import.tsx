@@ -1,3 +1,4 @@
+import { invalidateJobQueries } from '../lib/query-invalidation';
 import { NativeSelect } from '../components/ui/native-select';
 import { Checkbox } from '../components/ui/checkbox';
 import { useRef, useState, Fragment } from 'react';
@@ -45,6 +46,9 @@ function ImportPage() {
   const duration = () => page()?.duration ?? 0;
   const { data: streamUrl, isFetching: streamUrlLoading } = useQuery({
     queryKey: ['admin.import:streamUrl', video?.bvid, cid],
+    // 媒体令牌有独立有效期，不沿用普通业务数据的缓存周期。
+    staleTime: 0,
+    gcTime: 0,
     queryFn: () => api.admin.bilibili.streamUrl(video!.bvid, cid),
     enabled: Boolean(video && cid),
   });
@@ -115,6 +119,7 @@ function ImportPage() {
         body.endSec = end;
       }
       await api.admin.jobs.bilibili([{ ...body, trackId: target.trim() }]);
+      void invalidateJobQueries();
       setMsg('已加入后台任务，可在收录任务中查看进度');
     } catch (e) {
       notifyError(e);
@@ -220,7 +225,10 @@ function ImportPage() {
                             artist: info.owner,
                           });
                       }
-                      for (let i = 0; i < tasks.length; i += 50) await api.admin.jobs.bilibili(tasks.slice(i, i + 50));
+                      for (let i = 0; i < tasks.length; i += 50) {
+                        await api.admin.jobs.bilibili(tasks.slice(i, i + 50));
+                        void invalidateJobQueries();
+                      }
                       setSelected([]);
                       setMsg(`已提交 ${tasks.length} 个分 P 收录任务`);
                     } catch (e) {

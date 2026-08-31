@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { invalidateIntegrationQueries } from '../lib/query-invalidation';
 import { createFileRoute } from '@tanstack/react-router';
 import { api } from '../lib/api';
 import { clearFeedback, notifyError } from '../lib/feedback';
@@ -12,7 +13,7 @@ export const Route = createFileRoute('/admin/integrations')({
   component: IntegrationsPage,
 });
 function IntegrationsPage() {
-  const { data: cfg, refetch } = useQuery({
+  const { data: cfg } = useQuery({
     queryKey: ['admin.integrations:cfg'],
     queryFn: () => api.admin.integrations.get(),
   });
@@ -51,7 +52,7 @@ function IntegrationsPage() {
     setApiKey('');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-    void refetch();
+    void invalidateIntegrationQueries();
   }
   return (
     <div className="max-w-2xl space-y-4">
@@ -129,7 +130,7 @@ function IntegrationsPage() {
           onClick={async () => {
             if (confirm('清除 B 站 Cookie？')) {
               await api.admin.integrations.update({ bilibiliCookie: '' });
-              void refetch();
+              void invalidateIntegrationQueries();
             }
           }}
         >
@@ -143,7 +144,7 @@ function IntegrationsPage() {
                 xfyunAppId: '',
                 xfyunApiKey: '',
               });
-              void refetch();
+              void invalidateIntegrationQueries();
             }
           }}
         >
