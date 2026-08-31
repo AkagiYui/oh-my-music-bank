@@ -1,71 +1,73 @@
-import { Show, createResource, type JSX } from 'solid-js';
-import { Link, useNavigate } from '@tanstack/solid-router';
+import { useQuery } from '@tanstack/react-query';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { api } from '../lib/api';
-import { isAdmin, logout, user } from '../stores/auth';
+import { logout, useAuth } from '../stores/auth';
 import { Button } from './ui/button';
-
-function NavLink(props: { to: string; children: JSX.Element }) {
+function NavLink(props: { to: string; children: React.ReactNode }) {
   return (
     <Link
       to={props.to}
-      class="rounded-md px-3 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
-      activeProps={{ class: 'text-foreground font-medium' }}
+      className="rounded-md px-3 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
+      activeProps={{ className: 'text-foreground font-medium' }}
       activeOptions={{ exact: props.to === '/' }}
     >
       {props.children}
     </Link>
   );
 }
-
 /** 站点头部：品牌、导航与登录态操作。 */
 export function SiteHeader() {
+  const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
-  const [site] = createResource(() => api.site().catch(() => ({ brandName: 'Oh My Music Bank' })));
-
+  const { data: site } = useQuery({
+    queryKey: ['SiteHeader:site'],
+    queryFn: () => api.site().catch(() => ({ brandName: 'Oh My Music Bank' })),
+  });
   return (
-    <header class="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
-      <div class="mx-auto flex h-14 max-w-5xl items-center gap-2 px-4">
-        <Link to="/" class="mr-2 flex items-center gap-2 font-semibold">
-          <span class="text-primary">♪</span>
-          {site()?.brandName ?? 'Oh My Music Bank'}
+    <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
+      <div className="mx-auto flex min-h-14 max-w-5xl flex-wrap items-center gap-2 px-4 py-2">
+        <Link to="/" className="mr-2 flex items-center gap-2 font-semibold">
+          <span className="text-primary">♪</span>
+          {site?.brandName ?? 'Oh My Music Bank'}
         </Link>
-        <nav class="flex items-center gap-1 text-sm">
+        <nav className="flex items-center gap-1 text-sm">
           <NavLink to="/">首页</NavLink>
           <NavLink to="/search">试搜</NavLink>
         </nav>
-        <div class="ml-auto flex items-center gap-2">
-          <Show
-            when={user()}
-            fallback={
-              <>
-                <Button size="sm" variant="ghost" onClick={() => navigate({ to: '/login' })}>
-                  登录
-                </Button>
-                <Button size="sm" onClick={() => navigate({ to: '/register' })}>
-                  注册
-                </Button>
-              </>
-            }
-          >
-            <Show when={isAdmin()}>
-              <Button size="sm" variant="ghost" onClick={() => navigate({ to: '/admin' })}>
-                管理
+        <div className="ml-auto flex items-center gap-2">
+          {user ? (
+            <>
+              {isAdmin ? (
+                <>
+                  <Button size="sm" variant="ghost" onClick={() => navigate({ to: '/admin' })}>
+                    管理
+                  </Button>
+                </>
+              ) : null}
+              <Button size="sm" variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>
+                控制台
               </Button>
-            </Show>
-            <Button size="sm" variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>
-              控制台
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                await logout();
-                navigate({ to: '/' });
-              }}
-            >
-              退出
-            </Button>
-          </Show>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  await logout();
+                  navigate({ to: '/' });
+                }}
+              >
+                退出
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button size="sm" variant="ghost" onClick={() => navigate({ to: '/login' })}>
+                登录
+              </Button>
+              <Button size="sm" onClick={() => navigate({ to: '/register' })}>
+                注册
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </header>

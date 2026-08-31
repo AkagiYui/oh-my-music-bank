@@ -1,183 +1,178 @@
-/**
- * 视频音频裁剪器：在时间轴上拖动起止把手选取片段，可整段播放或试听片段。
- * 音频由后端代理流（带 Referer），支持 Range，故可秒级 seek。
- */
-import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { formatDuration } from '../lib/utils';
 
-function clamp(v: number, min: number, max: number) {
-  return v < min ? min : v > max ? max : v;
-}
-
-export function BiliCropper(props: {
+type CropperProps = {
   src: string;
   duration: number;
   start: number;
   end: number;
   onChange: (start: number, end: number) => void;
-}) {
-  let audio!: HTMLAudioElement;
-  let bar!: HTMLDivElement;
-
-  const [cur, setCur] = createSignal(0);
-  const [playing, setPlaying] = createSignal(false);
-  const [metaDur, setMetaDur] = createSignal(0);
-  const [drag, setDrag] = createSignal<null | 'start' | 'end'>(null);
-  let segmentPreview = false;
-  createEffect(() => {
-    props.src;
-    setCur(0);
-    setMetaDur(0);
-    setPlaying(false);
-    segmentPreview = false;
-  });
-
-  const dur = () => metaDur() || props.duration || 1;
-  const pct = (v: number) => `${(v / dur()) * 100}%`;
-
-  onMount(() => {
-    const onTime = () => {
-      setCur(audio.currentTime);
-      if (segmentPreview && audio.currentTime >= props.end) {
-        audio.pause();
-        segmentPreview = false;
-      }
-    };
-    const onMeta = () => {
-      if (Number.isFinite(audio.duration) && audio.duration > 0) setMetaDur(audio.duration);
-    };
-    const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
-    audio.addEventListener('timeupdate', onTime);
-    audio.addEventListener('loadedmetadata', onMeta);
-    audio.addEventListener('durationchange', onMeta);
-    audio.addEventListener('play', onPlay);
-    audio.addEventListener('pause', onPause);
-    onCleanup(() => {
+};
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+export function BiliCropper(props: CropperProps) {
+  return <CropperSession key={props.src} {...props} />;
+}
+function CropperSession(props: CropperProps) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const segmentPreview = useRef(false);
+  const drag = useRef<'start' | 'end' | null>(null);
+  const [cur, setCur] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [metaDur, setMetaDur] = useState(0);
+  const [error, setError] = useState('');
+  const dur = metaDur || props.duration || 1;
+  const gap = Math.min(0.5, dur);
+  const pct = (v: number) => `${clamp(v / dur, 0, 1) * 100}%`;
+  useEffect(() => {
+    const audio = audioRef.current!;
+    return () => {
       audio.pause();
-      audio.removeEventListener('timeupdate', onTime);
-      audio.removeEventListener('loadedmetadata', onMeta);
-      audio.removeEventListener('durationchange', onMeta);
-      audio.removeEventListener('play', onPlay);
-      audio.removeEventListener('pause', onPause);
-    });
-  });
-
-  function timeAt(clientX: number) {
-    const r = bar.getBoundingClientRect();
-    return clamp((clientX - r.left) / r.width, 0, 1) * dur();
-  }
-
-  function startDrag(which: 'start' | 'end') {
-    return (e: PointerEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setDrag(which);
-      const move = (ev: PointerEvent) => {
-        const t = timeAt(ev.clientX);
-        if (which === 'start') props.onChange(Math.min(t, props.end - 0.5), props.end);
-        else props.onChange(props.start, Math.max(t, props.start + 0.5));
-      };
-      const up = () => {
-        setDrag(null);
-        window.removeEventListener('pointermove', move);
-        window.removeEventListener('pointerup', up);
-      };
-      window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', up);
     };
+  }, []);
+  function play() {
+    void audioRef.current!.play().catch(() => setError('试听失败，请刷新视频或检查网络'));
   }
-
-  function onBarPointerDown(e: PointerEvent) {
-    if (drag()) return;
-    const t = timeAt(e.clientX);
-    audio.currentTime = t;
-    setCur(t);
+  function timeAt(clientX: number) {
+    const rect = barRef.current!.getBoundingClientRect();
+    return clamp((clientX - rect.left) / (rect.width || 1), 0, 1) * dur;
   }
-
-  function togglePlay() {
-    segmentPreview = false;
-    if (audio.paused) audio.play().catch(() => {});
-    else audio.pause();
+  function startDrag(which: 'start' | 'end', e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    drag.current = which;
+    e.currentTarget.setPointerCapture(e.pointerId);
   }
-  function playSegment() {
-    audio.currentTime = props.start;
-    segmentPreview = true;
-    audio.play().catch(() => {});
+  function move(e: React.PointerEvent<HTMLDivElement>) {
+    if (!drag.current) return;
+    const time = timeAt(e.clientX);
+    if (drag.current === 'start') props.onChange(clamp(time, 0, Math.max(0, props.end - gap)), props.end);
+    else props.onChange(props.start, clamp(time, props.start + gap, dur));
   }
-
+  function stop(e: React.PointerEvent<HTMLDivElement>) {
+    drag.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  }
   return (
-    <div class="space-y-2">
-      <audio ref={audio} src={props.src} preload="metadata" class="hidden" />
-
+    <div className="space-y-2">
+      <audio
+        ref={audioRef}
+        src={props.src}
+        preload="metadata"
+        className="hidden"
+        onTimeUpdate={(e) => {
+          setCur(e.currentTarget.currentTime);
+          if (segmentPreview.current && e.currentTarget.currentTime >= props.end) {
+            e.currentTarget.pause();
+            segmentPreview.current = false;
+          }
+        }}
+        onLoadedMetadata={(e) => {
+          if (Number.isFinite(e.currentTarget.duration)) setMetaDur(e.currentTarget.duration);
+        }}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onError={() => setError('音频加载失败，请刷新视频后重试')}
+      />
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
       <div
-        ref={bar}
-        class="relative h-10 cursor-pointer touch-none select-none rounded-md border bg-muted"
-        onPointerDown={onBarPointerDown}
+        ref={barRef}
+        className="relative h-10 cursor-pointer touch-none select-none rounded-md border bg-muted"
+        onPointerDown={(e) => {
+          if (drag.current) return;
+          const time = timeAt(e.clientX);
+          audioRef.current!.currentTime = time;
+          setCur(time);
+        }}
       >
-        {/* 选中区间 */}
         <div
-          class="absolute inset-y-0 bg-primary/25"
-          style={{
-            left: pct(props.start),
-            width: pct(props.end - props.start),
-          }}
+          className="absolute inset-y-0 bg-primary/25"
+          style={{ left: pct(props.start), width: pct(props.end - props.start) }}
         />
-        {/* 播放头 */}
-        <div class="absolute inset-y-0 w-0.5 bg-foreground/60" style={{ left: pct(cur()) }} />
-        {/* 起把手 */}
-        <div
-          class="absolute inset-y-0 w-2 -translate-x-1/2 cursor-ew-resize rounded bg-primary"
-          style={{ left: pct(props.start) }}
-          onPointerDown={startDrag('start')}
-        />
-        {/* 止把手 */}
-        <div
-          class="absolute inset-y-0 w-2 -translate-x-1/2 cursor-ew-resize rounded bg-primary"
-          style={{ left: pct(props.end) }}
-          onPointerDown={startDrag('end')}
-        />
+        <div className="absolute inset-y-0 w-0.5 bg-foreground/60" style={{ left: pct(cur) }} />
+        {(['start', 'end'] as const).map((which) => (
+          <div
+            key={which}
+            className="absolute inset-y-0 w-2 -translate-x-1/2 cursor-ew-resize rounded bg-primary"
+            style={{ left: pct(props[which]) }}
+            role="slider"
+            tabIndex={0}
+            aria-label={which === 'start' ? '裁剪起点' : '裁剪终点'}
+            aria-valuemin={which === 'start' ? 0 : props.start + gap}
+            aria-valuemax={which === 'start' ? props.end - gap : dur}
+            aria-valuenow={props[which]}
+            onPointerDown={(e) => startDrag(which, e)}
+            onPointerMove={move}
+            onPointerUp={stop}
+            onPointerCancel={stop}
+            onKeyDown={(e) => {
+              if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+              e.preventDefault();
+              const next = props[which] + (e.key === 'ArrowLeft' ? -gap : gap);
+              if (which === 'start') props.onChange(clamp(next, 0, Math.max(0, props.end - gap)), props.end);
+              else props.onChange(props.start, clamp(next, props.start + gap, dur));
+            }}
+          />
+        ))}
       </div>
-
-      <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <Button size="sm" variant="secondary" onClick={togglePlay}>
-          {playing() ? '暂停' : '播放'}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            segmentPreview.current = false;
+            if (audioRef.current!.paused) play();
+            else audioRef.current!.pause();
+          }}
+        >
+          {playing ? '暂停' : '播放'}
         </Button>
-        <Button size="sm" variant="outline" onClick={playSegment}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            audioRef.current!.currentTime = props.start;
+            segmentPreview.current = true;
+            play();
+          }}
+        >
           试听片段
         </Button>
-        <span class="tabular-nums">
+        <span className="tabular-nums">
           起 {formatDuration(props.start)} · 止 {formatDuration(props.end)} · 时长{' '}
           {formatDuration(props.end - props.start)}
         </span>
-        <span class="ml-auto tabular-nums">
-          {formatDuration(cur())} / {formatDuration(dur())}
+        <span className="ml-auto tabular-nums">
+          {formatDuration(cur)} / {formatDuration(dur)}
         </span>
       </div>
-
-      <div class="flex items-center gap-2 text-xs">
+      <div className="flex items-center gap-2 text-xs">
         <Button
           size="sm"
           variant="ghost"
-          class="h-7"
-          onClick={() => props.onChange(Math.min(cur(), props.end - 0.5), props.end)}
+          className="h-7"
+          onClick={() => props.onChange(clamp(cur, 0, Math.max(0, props.end - gap)), props.end)}
         >
           以当前为起点
         </Button>
         <Button
           size="sm"
           variant="ghost"
-          class="h-7"
-          onClick={() => props.onChange(props.start, Math.max(props.start + 0.5, cur()))}
+          className="h-7"
+          onClick={() => props.onChange(props.start, clamp(cur, props.start + gap, dur))}
         >
           以当前为终点
         </Button>
-        <Show when={props.start > 0 || props.end < dur()}>
-          <Button size="sm" variant="ghost" class="h-7" onClick={() => props.onChange(0, dur())}>
+        {(props.start > 0 || props.end < dur) && (
+          <Button size="sm" variant="ghost" className="h-7" onClick={() => props.onChange(0, dur)}>
             重置为整段
           </Button>
-        </Show>
+        )}
       </div>
     </div>
   );

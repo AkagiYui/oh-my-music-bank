@@ -1,7 +1,7 @@
-import { Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { useState, useEffect } from 'react';
 export function Feedback() {
-  const [message, setMessage] = createSignal('');
-  onMount(() => {
+  const [message, setMessage] = useState('');
+  useEffect(() => {
     const apiError = (event: Event) => setMessage((event as CustomEvent<string>).detail);
     const unhandled = (event: PromiseRejectionEvent) => {
       setMessage(event.reason instanceof Error ? event.reason.message : String(event.reason));
@@ -9,22 +9,22 @@ export function Feedback() {
     };
     window.addEventListener('ommb:api-error', apiError);
     window.addEventListener('unhandledrejection', unhandled);
-    onCleanup(() => {
+    return () => {
       window.removeEventListener('ommb:api-error', apiError);
       window.removeEventListener('unhandledrejection', unhandled);
-    });
-  });
-  return (
-    <Show when={message()}>
+    };
+  }, []);
+  return message ? (
+    <>
       <div
         role="alert"
-        class="mx-auto flex max-w-5xl items-center gap-3 rounded border border-destructive bg-background p-3 text-sm text-destructive"
+        className="mx-auto flex max-w-5xl items-center gap-3 rounded border border-destructive bg-background p-3 text-sm text-destructive"
       >
-        <span>{message()}</span>
-        <button class="ml-auto" onClick={() => setMessage('')}>
+        <span>{message}</span>
+        <button className="ml-auto" onClick={() => setMessage('')}>
           关闭
         </button>
       </div>
-    </Show>
-  );
+    </>
+  ) : null;
 }

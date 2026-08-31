@@ -1,27 +1,31 @@
-/** 应用入口：TanStack Router（文件式路由 + history 模式），纯 SPA。 */
 import './app.css';
-import { render } from 'solid-js/web';
-import { RouterProvider, createRouter } from '@tanstack/solid-router';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { RouterProvider, createRouter } from '@tanstack/react-router';
 import { routeTree } from './routeTree.gen';
 import { loadSession } from './stores/auth';
+import { queryClient } from './lib/query-client';
 
-// 启动前从 localStorage 恢复登录态。
-loadSession();
-
+void loadSession();
 const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
   scrollRestoration: true,
   trailingSlash: 'never',
 });
-
-declare module '@tanstack/solid-router' {
+declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router;
   }
 }
-
 const root = document.getElementById('root');
 if (root) {
-  render(() => <RouterProvider router={router} />, root);
+  createRoot(root).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </StrictMode>,
+  );
 }

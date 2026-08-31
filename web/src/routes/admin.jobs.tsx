@@ -1,17 +1,24 @@
-import { For, Show, createResource, createSignal, onCleanup, onMount } from 'solid-js';
-import { createFileRoute } from '@tanstack/solid-router';
+import { Badge } from '../components/ui/badge';
+import { Progress } from '../components/ui/progress';
+import { useState, Fragment } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Pagination } from '../components/Pagination';
 export const Route = createFileRoute('/admin/jobs')({ component: JobsPage });
 function JobsPage() {
-  const [page, setPage] = createSignal(1);
-  const [jobs, { refetch }] = createResource(page, api.admin.jobs.list);
-  const [busy, setBusy] = createSignal('');
-  onMount(() => {
-    const timer = setInterval(() => refetch(), 3000);
-    onCleanup(() => clearInterval(timer));
+  const [page, setPage] = useState(1);
+  const {
+    data: jobs,
+    isFetching: jobsLoading,
+    refetch,
+  } = useQuery({
+    queryKey: ['admin.jobs:jobs', page],
+    refetchInterval: 3000,
+    queryFn: () => api.admin.jobs.list(page),
   });
+  const [busy, setBusy] = useState('');
   async function action(id: string, retry: boolean) {
     setBusy(id);
     try {
@@ -22,48 +29,60 @@ function JobsPage() {
     }
   }
   return (
-    <div class="space-y-4">
-      <h1 class="text-2xl font-semibold">收录任务</h1>
-      <p class="text-sm text-muted-foreground">
+    <div className="space-y-4">
+      <h1 className="text-2xl font-semibold">收录任务</h1>
+      <p className="text-sm text-muted-foreground">
         下载、解析与响度分析在后台运行。失败任务可重试，上传源文件保留七天；中断任务会自动恢复。
       </p>
-      <For each={jobs()?.data ?? []} fallback={<p>暂无任务</p>}>
-        {(j) => (
-          <div class="space-y-2 rounded border p-3">
-            <div class="flex items-center gap-3">
-              <span>{j.kind === 'upload' ? '文件上传' : 'B 站导入'}</span>
-              <span>
-                {j.stage} · {j.progress}%
-              </span>
-              <span class="ml-auto text-xs">
-                {new Date(j.createdAt).toLocaleString()} · 尝试 {j.attempts} 次
-              </span>
+      {(jobs?.data ?? []).length ? (
+        (jobs?.data ?? []).map((j, index) => (
+          <Fragment key={j.id}>
+            <div className="space-y-2 rounded border p-3">
+              <div className="flex items-center gap-3">
+                <span>{j.kind === 'upload' ? '文件上传' : 'B 站导入'}</span>
+                <Badge variant={j.status === 'failed' ? 'destructive' : 'secondary'}>
+                  {j.stage} · {j.progress}%
+                </Badge>
+                <span className="ml-auto text-xs">
+                  {new Date(j.createdAt).toLocaleString()} · 尝试 {j.attempts} 次
+                </span>
+              </div>
+              <Progress className="h-2 w-full" value={j.progress} />
+              {j.trackId ? (
+                <>
+                  <p className="text-sm">
+                    曲目 ID：{j.trackId} {j.deduplicated ? '（文件已存在）' : ''}
+                  </p>
+                </>
+              ) : null}
+              {j.errorMessage ? (
+                <>
+                  <p role="alert" className="text-sm text-destructive">
+                    {j.errorMessage}
+                  </p>
+                </>
+              ) : null}
+              {['queued', 'processing'].includes(j.status) ? (
+                <>
+                  <Button size="sm" disabled={busy === j.id || j.cancelRequested} onClick={() => action(j.id, false)}>
+                    取消
+                  </Button>
+                </>
+              ) : null}
+              {['failed', 'cancelled'].includes(j.status) ? (
+                <>
+                  <Button size="sm" disabled={busy === j.id} onClick={() => action(j.id, true)}>
+                    重试
+                  </Button>
+                </>
+              ) : null}
             </div>
-            <progress class="h-2 w-full" max="100" value={j.progress} />
-            <Show when={j.trackId}>
-              <p class="text-sm">
-                曲目 ID：{j.trackId} {j.deduplicated ? '（文件已存在）' : ''}
-              </p>
-            </Show>
-            <Show when={j.errorMessage}>
-              <p role="alert" class="text-sm text-destructive">
-                {j.errorMessage}
-              </p>
-            </Show>
-            <Show when={['queued', 'processing'].includes(j.status)}>
-              <Button size="sm" disabled={busy() === j.id || j.cancelRequested} onClick={() => action(j.id, false)}>
-                取消
-              </Button>
-            </Show>
-            <Show when={['failed', 'cancelled'].includes(j.status)}>
-              <Button size="sm" disabled={busy() === j.id} onClick={() => action(j.id, true)}>
-                重试
-              </Button>
-            </Show>
-          </div>
-        )}
-      </For>
-      <Pagination page={page()} total={jobs()?.total ?? 0} pageSize={20} loading={jobs.loading} onPage={setPage} />
+          </Fragment>
+        ))
+      ) : (
+        <p>暂无任务</p>
+      )}
+      <Pagination page={page} total={jobs?.total ?? 0} pageSize={20} loading={jobsLoading} onPage={setPage} />
     </div>
   );
 }

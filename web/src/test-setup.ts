@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, vi } from 'vitest';
-import { cleanup } from '@solidjs/testing-library';
+import { cleanup } from '@testing-library/react';
 // Node 的实验性 Web Storage 会覆盖旧版 jsdom 环境；测试显式使用隔离存储。
 beforeEach(() => {
   const values = new Map<string, string>();

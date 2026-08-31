@@ -8,7 +8,7 @@ export function Pagination(props: {
 }) {
   const pages = () => Math.max(1, Math.ceil(props.total / props.pageSize));
   return (
-    <div class="flex items-center justify-end gap-3 text-sm">
+    <div className="flex items-center justify-end gap-3 text-sm">
       <span>
         共 {props.total} 条 · {props.page} / {pages()}
       </span>

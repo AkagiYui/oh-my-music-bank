@@ -19,3 +19,7 @@ web/.vite/
 # 杂项
 .DS_Store
 *.log
+
+# 浏览器回归测试产物
+web/test-results/
+web/playwright-report/

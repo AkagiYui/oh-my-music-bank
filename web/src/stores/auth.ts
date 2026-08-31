@@ -1,50 +1,80 @@
-/** 登录态全局 store。 */
-import { createSignal } from 'solid-js';
+import { useSyncExternalStore } from 'react';
 import { api, clearTokens, getAccessToken, setTokens, type User } from '../lib/api';
+import { queryClient } from '../lib/query-client';
 
-const [user, setUser] = createSignal<User | null>(null);
-const [ready, setReady] = createSignal(false);
+type AuthState = { user: User | null; ready: boolean };
+let state: AuthState = { user: null, ready: false };
+let sessionGeneration = 0;
+const listeners = new Set<() => void>();
+function update(next: AuthState) {
+  state = next;
+  listeners.forEach((listener) => listener());
+}
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
 
-export { user, ready };
-export const isAuthenticated = () => user() !== null;
-export const isAdmin = () => user()?.role === 'admin';
+// 使用不可变快照订阅登录态，避免 React 重渲染时丢失全局会话。
+export function useAuth() {
+  const snapshot = useSyncExternalStore(subscribe, () => state);
+  return { ...snapshot, isAuthenticated: snapshot.user !== null, isAdmin: snapshot.user?.role === 'admin' };
+}
 
-/** 启动时从本地令牌恢复用户信息。 */
-export function loadSession() {
+export async function loadSession() {
+  const generation = ++sessionGeneration;
   if (!getAccessToken()) {
-    setReady(true);
+    update({ user: null, ready: true });
     return;
   }
-  api.auth
-    .me()
-    .then((u) => setUser(u))
-    .catch(() => {
-      setUser(null);
-    })
-    .finally(() => setReady(true));
+  try {
+    const user = await api.auth.me();
+    if (generation === sessionGeneration) update({ user, ready: true });
+  } catch {
+    if (generation === sessionGeneration) update({ user: null, ready: true });
+  }
 }
 
 export async function login(email: string, password: string): Promise<User> {
+  const generation = ++sessionGeneration;
   const res = await api.auth.login({ email, password });
-  setTokens(res.accessToken, res.refreshToken);
-  setUser(res.user);
+  if (generation === sessionGeneration) {
+    queryClient.clear();
+    setTokens(res.accessToken, res.refreshToken);
+    update({ user: res.user, ready: true });
+  }
   return res.user;
 }
 
 export async function register(username: string, email: string, password: string): Promise<User> {
+  const generation = ++sessionGeneration;
   const res = await api.auth.register({ username, email, password });
-  setTokens(res.accessToken, res.refreshToken);
-  setUser(res.user);
+  if (generation === sessionGeneration) {
+    queryClient.clear();
+    setTokens(res.accessToken, res.refreshToken);
+    update({ user: res.user, ready: true });
+  }
   return res.user;
 }
 
 export async function logout() {
-  await api.auth.logout();
-  clearTokens();
-  localStorage.removeItem('ommb.tryKey');
-  setUser(null);
+  const generation = ++sessionGeneration;
+  try {
+    await api.auth.logout();
+  } finally {
+    if (generation === sessionGeneration) {
+      clearTokens();
+      queryClient.clear();
+      localStorage.removeItem('ommb.tryKey');
+      update({ user: null, ready: true });
+    }
+  }
 }
 window.addEventListener('ommb:session-expired', () => {
+  ++sessionGeneration;
   clearTokens();
-  setUser(null);
+  queryClient.clear();
+  update({ user: null, ready: true });
 });

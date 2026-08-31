@@ -9,43 +9,28 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SearchRouteImport } from './routes/search'
-import { Route as RegisterRouteImport } from './routes/register'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as SearchRouteImport } from './routes/search'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
-import { Route as AdminUsersRouteImport } from './routes/admin.users'
-import { Route as AdminUploadRouteImport } from './routes/admin.upload'
-import { Route as AdminTracksRouteImport } from './routes/admin.tracks'
-import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
-import { Route as AdminLogsRouteImport } from './routes/admin.logs'
-import { Route as AdminJobsRouteImport } from './routes/admin.jobs'
-import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
-import { Route as AdminImportRouteImport } from './routes/admin.import'
-import { Route as AdminArtistsRouteImport } from './routes/admin.artists'
-import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
 import { Route as AdminAlbumsRouteImport } from './routes/admin.albums'
+import { Route as AdminApiKeysRouteImport } from './routes/admin.api-keys'
+import { Route as AdminArtistsRouteImport } from './routes/admin.artists'
+import { Route as AdminImportRouteImport } from './routes/admin.import'
+import { Route as AdminIntegrationsRouteImport } from './routes/admin.integrations'
+import { Route as AdminJobsRouteImport } from './routes/admin.jobs'
+import { Route as AdminLogsRouteImport } from './routes/admin.logs'
+import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminTracksRouteImport } from './routes/admin.tracks'
+import { Route as AdminUploadRouteImport } from './routes/admin.upload'
+import { Route as AdminUsersRouteImport } from './routes/admin.users'
 
-const SearchRoute = SearchRouteImport.update({
-  id: '/search',
-  path: '/search',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RegisterRoute = RegisterRouteImport.update({
-  id: '/register',
-  path: '/register',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -53,9 +38,24 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -63,49 +63,9 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminRoute,
 } as any)
-const AdminUsersRoute = AdminUsersRouteImport.update({
-  id: '/users',
-  path: '/users',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminUploadRoute = AdminUploadRouteImport.update({
-  id: '/upload',
-  path: '/upload',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminTracksRoute = AdminTracksRouteImport.update({
-  id: '/tracks',
-  path: '/tracks',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminSettingsRoute = AdminSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminLogsRoute = AdminLogsRouteImport.update({
-  id: '/logs',
-  path: '/logs',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminJobsRoute = AdminJobsRouteImport.update({
-  id: '/jobs',
-  path: '/jobs',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
-  id: '/integrations',
-  path: '/integrations',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminImportRoute = AdminImportRouteImport.update({
-  id: '/import',
-  path: '/import',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminArtistsRoute = AdminArtistsRouteImport.update({
-  id: '/artists',
-  path: '/artists',
+const AdminAlbumsRoute = AdminAlbumsRouteImport.update({
+  id: '/albums',
+  path: '/albums',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminApiKeysRoute = AdminApiKeysRouteImport.update({
@@ -113,9 +73,49 @@ const AdminApiKeysRoute = AdminApiKeysRouteImport.update({
   path: '/api-keys',
   getParentRoute: () => AdminRoute,
 } as any)
-const AdminAlbumsRoute = AdminAlbumsRouteImport.update({
-  id: '/albums',
-  path: '/albums',
+const AdminArtistsRoute = AdminArtistsRouteImport.update({
+  id: '/artists',
+  path: '/artists',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminImportRoute = AdminImportRouteImport.update({
+  id: '/import',
+  path: '/import',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
+  id: '/integrations',
+  path: '/integrations',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminJobsRoute = AdminJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminLogsRoute = AdminLogsRouteImport.update({
+  id: '/logs',
+  path: '/logs',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminTracksRoute = AdminTracksRouteImport.update({
+  id: '/tracks',
+  path: '/tracks',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminUploadRoute = AdminUploadRouteImport.update({
+  id: '/upload',
+  path: '/upload',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
   getParentRoute: () => AdminRoute,
 } as any)
 
@@ -250,34 +250,13 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
 }
 
-declare module '@tanstack/solid-router' {
+declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/search': {
-      id: '/search'
-      path: '/search'
-      fullPath: '/search'
-      preLoaderRoute: typeof SearchRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/register': {
-      id: '/register'
-      path: '/register'
-      fullPath: '/register'
-      preLoaderRoute: typeof RegisterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -287,11 +266,32 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -301,67 +301,11 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/users': {
-      id: '/admin/users'
-      path: '/users'
-      fullPath: '/admin/users'
-      preLoaderRoute: typeof AdminUsersRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/upload': {
-      id: '/admin/upload'
-      path: '/upload'
-      fullPath: '/admin/upload'
-      preLoaderRoute: typeof AdminUploadRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/tracks': {
-      id: '/admin/tracks'
-      path: '/tracks'
-      fullPath: '/admin/tracks'
-      preLoaderRoute: typeof AdminTracksRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/settings': {
-      id: '/admin/settings'
-      path: '/settings'
-      fullPath: '/admin/settings'
-      preLoaderRoute: typeof AdminSettingsRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/logs': {
-      id: '/admin/logs'
-      path: '/logs'
-      fullPath: '/admin/logs'
-      preLoaderRoute: typeof AdminLogsRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/jobs': {
-      id: '/admin/jobs'
-      path: '/jobs'
-      fullPath: '/admin/jobs'
-      preLoaderRoute: typeof AdminJobsRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/integrations': {
-      id: '/admin/integrations'
-      path: '/integrations'
-      fullPath: '/admin/integrations'
-      preLoaderRoute: typeof AdminIntegrationsRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/import': {
-      id: '/admin/import'
-      path: '/import'
-      fullPath: '/admin/import'
-      preLoaderRoute: typeof AdminImportRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/artists': {
-      id: '/admin/artists'
-      path: '/artists'
-      fullPath: '/admin/artists'
-      preLoaderRoute: typeof AdminArtistsRouteImport
+    '/admin/albums': {
+      id: '/admin/albums'
+      path: '/albums'
+      fullPath: '/admin/albums'
+      preLoaderRoute: typeof AdminAlbumsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/api-keys': {
@@ -371,11 +315,67 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AdminApiKeysRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/albums': {
-      id: '/admin/albums'
-      path: '/albums'
-      fullPath: '/admin/albums'
-      preLoaderRoute: typeof AdminAlbumsRouteImport
+    '/admin/artists': {
+      id: '/admin/artists'
+      path: '/artists'
+      fullPath: '/admin/artists'
+      preLoaderRoute: typeof AdminArtistsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/import': {
+      id: '/admin/import'
+      path: '/import'
+      fullPath: '/admin/import'
+      preLoaderRoute: typeof AdminImportRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/integrations': {
+      id: '/admin/integrations'
+      path: '/integrations'
+      fullPath: '/admin/integrations'
+      preLoaderRoute: typeof AdminIntegrationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/jobs': {
+      id: '/admin/jobs'
+      path: '/jobs'
+      fullPath: '/admin/jobs'
+      preLoaderRoute: typeof AdminJobsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/logs': {
+      id: '/admin/logs'
+      path: '/logs'
+      fullPath: '/admin/logs'
+      preLoaderRoute: typeof AdminLogsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/tracks': {
+      id: '/admin/tracks'
+      path: '/tracks'
+      fullPath: '/admin/tracks'
+      preLoaderRoute: typeof AdminTracksRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/upload': {
+      id: '/admin/upload'
+      path: '/upload'
+      fullPath: '/admin/upload'
+      preLoaderRoute: typeof AdminUploadRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof AdminRoute
     }
   }

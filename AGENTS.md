@@ -16,11 +16,11 @@
 - 仓库根 `schema.sql` 是给人看的完整参考，须与 `00001_init_schema.sql` 保持一致。
 - 大整数主键（曲目/艺术家的雪花 ID）在 JSON 中以字符串序列化，避免前端精度丢失。
 
-## 前端（SolidJS SPA）
+## 前端（React SPA）
 
-- 技术栈：SolidJS + TanStack Solid Router（文件式路由）+ Vite + Tailwind v4 + Kobalte。
+- 技术栈：React + TanStack React Router（文件式路由）+ TanStack Query + Vite + Tailwind v4 + shadcn/ui。
 - 纯 SPA，无 SSR/SSG。在 `web/` 目录下操作。
-- 修改后：`pnpm typecheck` 与 `pnpm build`。
+- 修改后：`pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm test:e2e` 与 `pnpm build`。
 - Tailwind 任意值写法尽量简化为标准工具类（如 `w-[200px]` → `w-50`）。
 - `web/src/routeTree.gen.ts` 由插件在 `pnpm dev`/`pnpm build` 时自动生成（已提交以便全新检出可直接 typecheck），不要手改。
 

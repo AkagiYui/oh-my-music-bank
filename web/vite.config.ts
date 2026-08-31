@@ -1,22 +1,18 @@
 import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
-import solid from 'vite-plugin-solid';
+import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 /**
  * Vite 配置（纯 SPA）。
- * - TanStack Router 文件式路由（history 模式）；`tanstackRouter` 必须排在 `solid()` 之前。
+ * - TanStack Router 文件式路由（history 模式）；`tanstackRouter` 必须排在 `react()` 之前。
  * - 开发期把 /api 与 /health 代理到本地 Go 后端（默认 :9111）。
  * - 构建产物为纯静态文件，由 Caddy 托管并做 SPA 回退。
  */
 export default defineConfig({
   base: '/',
-  plugins: [
-    tanstackRouter({ target: 'solid', autoCodeSplitting: true }),
-    solid(),
-    tailwindcss(),
-  ],
+  plugins: [tanstackRouter({ target: 'react', autoCodeSplitting: true }), react(), tailwindcss()],
   resolve: {
     alias: {
       '~': fileURLToPath(new URL('./src', import.meta.url)),

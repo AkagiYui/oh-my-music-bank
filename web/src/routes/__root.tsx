@@ -1,29 +1,36 @@
-import { ErrorBoundary } from 'solid-js';
+import { Outlet, createRootRoute, useRouter } from '@tanstack/react-router';
 import { Feedback } from '../components/Feedback';
-/** 根路由布局：站点头部 + 内容出口。 */
-import { Outlet, createRootRoute } from '@tanstack/solid-router';
 import { SiteHeader } from '../components/SiteHeader';
+import { Button } from '../components/ui/button';
 
+function RouteError({ error, reset }: { error: Error; reset: () => void }) {
+  const router = useRouter();
+  return (
+    <div role="alert" className="space-y-3 p-6">
+      <p>页面加载失败：{error.message}</p>
+      <Button
+        onClick={() => {
+          void router.invalidate();
+          reset();
+        }}
+      >
+        重试
+      </Button>
+    </div>
+  );
+}
 export const Route = createRootRoute({
   component: () => (
-    <div class="min-h-screen">
+    <div className="min-h-screen">
       <SiteHeader />
       <Feedback />
-      <main class="mx-auto max-w-5xl px-4 py-8">
-        <ErrorBoundary
-          fallback={(err, reset) => (
-            <div role="alert" class="space-y-3">
-              <p>页面加载失败：{String(err)}</p>
-              <button onClick={reset}>重试</button>
-            </div>
-          )}
-        >
-          <Outlet />
-        </ErrorBoundary>
+      <main className="mx-auto max-w-5xl px-4 py-8">
+        <Outlet />
       </main>
     </div>
   ),
+  errorComponent: RouteError,
   notFoundComponent: () => (
-    <div class="flex min-h-[40vh] items-center justify-center text-muted-foreground">页面不存在（404）</div>
+    <div className="flex min-h-80 items-center justify-center text-muted-foreground">页面不存在（404）</div>
   ),
 });

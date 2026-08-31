@@ -1,8 +1,7 @@
+import { useRef, useState, Fragment } from 'react';
 import { Pagination } from '../components/Pagination';
 import { TrackFilters } from '../components/TrackFilters';
-/** 路由 `/search` —— 用 API Key 试搜音乐并播放。 */
-import { For, Show, createSignal } from 'solid-js';
-import { createFileRoute } from '@tanstack/solid-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { api, ApiError, type TrackDTO } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -10,172 +9,168 @@ import { Label } from '../components/ui/label';
 import { Card, CardContent } from '../components/ui/card';
 import { AudioPlayer } from '../components/AudioPlayer';
 import { formatDuration } from '../lib/utils';
-
 export const Route = createFileRoute('/search')({
   component: SearchPage,
 });
-
 const KEY_STORAGE = 'ommb.tryKey';
-
 function SearchPage() {
-  const [apiKey, setApiKey] = createSignal(localStorage.getItem(KEY_STORAGE) ?? '');
-  const [q, setQ] = createSignal('');
-  const [filters, setFilters] = createSignal<Record<string, string>>({});
-  const [page, setPage] = createSignal(1);
-  const [total, setTotal] = createSignal(0);
-  let searchRequest = 0,
-    detailRequest = 0;
-  const [results, setResults] = createSignal<TrackDTO[]>([]);
-  const [selected, setSelected] = createSignal<TrackDTO | null>(null);
-  const [loading, setLoading] = createSignal(false);
-  const [error, setError] = createSignal('');
-
-  async function doSearch(e?: Event, nextPage = 1) {
-    const token = ++searchRequest;
-    ++detailRequest;
+  const [apiKey, setApiKey] = useState(localStorage.getItem(KEY_STORAGE) ?? '');
+  const [q, setQ] = useState('');
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const searchRequest = useRef(0);
+  const detailRequest = useRef(0);
+  const [results, setResults] = useState<TrackDTO[]>([]);
+  const [selected, setSelected] = useState<TrackDTO | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  async function doSearch(e?: React.FormEvent, nextPage = 1) {
+    const token = ++searchRequest.current;
+    ++detailRequest.current;
     e?.preventDefault();
     setError('');
     setSelected(null);
-    const key = apiKey().trim();
+    const key = apiKey.trim();
     if (!key) {
       setError('请先填写 API Key（可在控制台创建）');
       return;
     }
-    if (!q().trim() && !Object.values(filters()).some(Boolean)) return;
+    if (!q.trim() && !Object.values(filters).some(Boolean)) return;
     localStorage.setItem(KEY_STORAGE, key);
     setLoading(true);
     try {
-      const res = await api.open.search(key, q().trim(), nextPage, filters());
-      if (token !== searchRequest) return;
+      const res = await api.open.search(key, q.trim(), nextPage, filters);
+      if (token !== searchRequest.current) return;
       setPage(nextPage);
       setTotal(res.total);
       setResults(res.data);
       if (res.data.length === 0) setError('没有找到相关曲目');
     } catch (err) {
-      if (token !== searchRequest) return;
+      if (token !== searchRequest.current) return;
       setError(err instanceof ApiError ? `${err.status} ${err.message}` : String(err));
       setResults([]);
     } finally {
-      if (token === searchRequest) setLoading(false);
+      if (token === searchRequest.current) setLoading(false);
     }
   }
-
   async function openDetail(t: TrackDTO) {
-    const token = ++detailRequest;
+    const token = ++detailRequest.current;
     setError('');
     try {
-      const detail = await api.open.getTrack(apiKey().trim(), t.id);
-      if (token === detailRequest) setSelected(detail);
+      const detail = await api.open.getTrack(apiKey.trim(), t.id);
+      if (token === detailRequest.current) setSelected(detail);
     } catch (err) {
-      if (token !== detailRequest) return;
+      if (token !== detailRequest.current) return;
       setError(err instanceof ApiError ? err.message : String(err));
     }
   }
-
   const artistNames = (t: TrackDTO) => t.artists.map((a) => a.name).join(' / ') || '未知艺术家';
-
   return (
-    <div class="space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 class="text-2xl font-semibold">试搜音乐</h1>
-        <p class="text-sm text-muted-foreground">这里直接调用开放接口，体验 API 的真实返回。</p>
+        <h1 className="text-2xl font-semibold">试搜音乐</h1>
+        <p className="text-sm text-muted-foreground">这里直接调用开放接口，体验 API 的真实返回。</p>
       </div>
 
       <Card>
-        <CardContent class="space-y-4 p-6">
-          <div class="space-y-1.5">
-            <Label for="key">API Key</Label>
+        <CardContent className="space-y-4 p-6">
+          <div className="space-y-1.5">
+            <Label htmlFor="key">API Key</Label>
             <Input
               id="key"
               type="password"
               placeholder="omb_..."
-              value={apiKey()}
-              onInput={(e) => setApiKey(e.currentTarget.value)}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.currentTarget.value)}
             />
           </div>
-          <TrackFilters value={filters()} onChange={setFilters} />
-          <form class="flex gap-2" onSubmit={doSearch}>
-            <Input
-              placeholder="输入歌名 / 别名，如 告白气球"
-              value={q()}
-              onInput={(e) => setQ(e.currentTarget.value)}
-            />
-            <Button type="submit" disabled={loading()}>
-              {loading() ? '搜索中…' : '搜索'}
+          <TrackFilters value={filters} onChange={setFilters} />
+          <form className="flex gap-2" onSubmit={doSearch}>
+            <Input placeholder="输入歌名 / 别名，如 告白气球" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
+            <Button type="submit" disabled={loading}>
+              {loading ? '搜索中…' : '搜索'}
             </Button>
           </form>
-          <Show when={error()}>
-            <p class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
-              {error()}
-            </p>
-          </Show>
+          {error ? (
+            <>
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
+                {error}
+              </p>
+            </>
+          ) : null}
         </CardContent>
       </Card>
 
-      <Show when={results().length > 0}>
-        <div class="divide-y rounded-md border">
-          <For each={results()}>
-            {(t) => (
-              <button
-                type="button"
-                class="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-accent"
-                onClick={() => openDetail(t)}
-              >
-                <Show when={t.coverUrl} fallback={<div class="size-10 shrink-0 rounded bg-muted" />}>
-                  <img src={t.coverUrl} alt="" class="size-10 shrink-0 rounded object-cover" />
-                </Show>
-                <div class="min-w-0 flex-1">
-                  <div class="truncate font-medium">{t.title}</div>
-                  <div class="truncate text-sm text-muted-foreground">{artistNames(t)}</div>
-                </div>
-                <div class="text-sm tabular-nums text-muted-foreground">{formatDuration(t.duration)}</div>
-              </button>
-            )}
-          </For>
-        </div>
-      </Show>
+      {results.length > 0 ? (
+        <>
+          <div className="divide-y rounded-md border">
+            {(results ?? []).map((t, index) => (
+              <Fragment key={index}>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-accent"
+                  onClick={() => openDetail(t)}
+                >
+                  {t.coverUrl ? (
+                    <>
+                      <img src={t.coverUrl} alt="" className="size-10 shrink-0 rounded object-cover" />
+                    </>
+                  ) : (
+                    <div className="size-10 shrink-0 rounded bg-muted" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{t.title}</div>
+                    <div className="truncate text-sm text-muted-foreground">{artistNames(t)}</div>
+                  </div>
+                  <div className="text-sm tabular-nums text-muted-foreground">{formatDuration(t.duration)}</div>
+                </button>
+              </Fragment>
+            ))}
+          </div>
+        </>
+      ) : null}
 
-      <Pagination
-        page={page()}
-        total={total()}
-        pageSize={20}
-        loading={loading()}
-        onPage={(p) => doSearch(undefined, p)}
-      />
-      <Show when={selected()}>
-        {(t) => (
-          <Card>
-            <CardContent class="space-y-4 p-6">
-              <div class="flex items-center gap-4">
-                <Show when={t().coverUrl} fallback={<div class="size-16 rounded bg-muted" />}>
-                  <img src={t().coverUrl} alt="" class="size-16 rounded object-cover" />
-                </Show>
-                <div>
-                  <div class="text-lg font-semibold">{t().title}</div>
-                  <div class="text-sm text-muted-foreground">{artistNames(t())}</div>
-                  <Show when={t().aliases.length > 0}>
-                    <div class="text-xs text-muted-foreground">别名：{t().aliases.join('、')}</div>
-                  </Show>
-                </div>
+      <Pagination page={page} total={total} pageSize={20} loading={loading} onPage={(p) => doSearch(undefined, p)} />
+      {selected ? (
+        <Card>
+          <CardContent className="space-y-4 p-6">
+            <div className="flex items-center gap-4">
+              {selected!.coverUrl ? (
+                <>
+                  <img src={selected!.coverUrl} alt="" className="size-16 rounded object-cover" />
+                </>
+              ) : (
+                <div className="size-16 rounded bg-muted" />
+              )}
+              <div>
+                <div className="text-lg font-semibold">{selected!.title}</div>
+                <div className="text-sm text-muted-foreground">{artistNames(selected!)}</div>
+                {selected!.aliases.length > 0 ? (
+                  <>
+                    <div className="text-xs text-muted-foreground">别名：{selected!.aliases.join('、')}</div>
+                  </>
+                ) : null}
               </div>
+            </div>
 
-              <Show
-                when={(t().audios ?? []).length > 0}
-                fallback={<p class="text-sm text-muted-foreground">暂无可播放音频。</p>}
-              >
+            {(selected!.audios ?? []).length > 0 ? (
+              <>
                 <AudioPlayer
-                  sources={(t().audios ?? []).map((au) => ({
+                  sources={(selected!.audios ?? []).map((au) => ({
                     id: au.id,
                     label: `${au.qualityLabel} · ${Math.round(au.bitrate / 1000)}kbps`,
                     url: au.url,
                     loudness: au.loudness,
                   }))}
                 />
-              </Show>
-            </CardContent>
-          </Card>
-        )}
-      </Show>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">暂无可播放音频。</p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -1,13 +1,14 @@
-/** 路由 `/admin` —— 管理后台布局：侧边导航 + 子页面出口（仅管理员）。 */
-import { For, createEffect } from 'solid-js';
-import { Link, Outlet, createFileRoute, useNavigate } from '@tanstack/solid-router';
-import { isAdmin, ready } from '../stores/auth';
-
+import { useEffect, Fragment } from 'react';
+import { Link, Outlet, createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useAuth } from '../stores/auth';
 export const Route = createFileRoute('/admin')({
   component: AdminLayout,
 });
-
-const NAV: { to: string; label: string; exact?: boolean }[] = [
+const NAV: {
+  to: string;
+  label: string;
+  exact?: boolean;
+}[] = [
   { to: '/admin', label: '概览', exact: true },
   { to: '/admin/upload', label: '上传音频' },
   { to: '/admin/jobs', label: '收录任务' },
@@ -21,32 +22,32 @@ const NAV: { to: string; label: string; exact?: boolean }[] = [
   { to: '/admin/settings', label: '站点设置' },
   { to: '/admin/integrations', label: '集成' },
 ];
-
 function AdminLayout() {
+  const { ready, isAdmin } = useAuth();
   const navigate = useNavigate();
-  createEffect(() => {
-    if (ready() && !isAdmin()) navigate({ to: '/' });
-  });
-
+  useEffect(() => {
+    if (ready && !isAdmin) navigate({ to: '/' });
+  }, [ready, isAdmin, navigate]);
+  if (!ready || !isAdmin) return null;
   return (
-    <div class="flex flex-col gap-6 sm:flex-row">
-      <aside class="shrink-0 sm:w-40">
-        <nav class="flex gap-0.5 overflow-x-auto text-sm sm:flex-col">
-          <For each={NAV}>
-            {(n) => (
+    <div className="flex flex-col gap-6 sm:flex-row">
+      <aside className="shrink-0 sm:w-40">
+        <nav className="flex gap-0.5 overflow-x-auto text-sm sm:flex-col">
+          {(NAV ?? []).map((n, index) => (
+            <Fragment key={n.to}>
               <Link
                 to={n.to}
-                class="whitespace-nowrap rounded-md px-3 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                activeProps={{ class: 'bg-accent font-medium text-foreground' }}
+                className="whitespace-nowrap rounded-md px-3 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                activeProps={{ className: 'bg-accent font-medium text-foreground' }}
                 activeOptions={{ exact: n.exact ?? false }}
               >
                 {n.label}
               </Link>
-            )}
-          </For>
+            </Fragment>
+          ))}
         </nav>
       </aside>
-      <div class="min-w-0 flex-1">
+      <div className="min-w-0 flex-1">
         <Outlet />
       </div>
     </div>
