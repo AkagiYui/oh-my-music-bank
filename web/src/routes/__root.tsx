@@ -1,5 +1,6 @@
 import { Outlet, createRootRoute, useRouter } from '@tanstack/react-router';
 import { Feedback } from '../components/Feedback';
+import { SiteProvider, SiteMetadata, SiteFooter } from '../components/SiteBranding';
 import { SiteHeader } from '../components/SiteHeader';
 import { Button } from '../components/ui/button';
 
@@ -21,13 +22,17 @@ function RouteError({ error, reset }: { error: Error; reset: () => void }) {
 }
 export const Route = createRootRoute({
   component: () => (
-    <div className="min-h-screen">
-      <SiteHeader />
-      <Feedback />
-      <main className="mx-auto max-w-5xl px-4 py-8">
-        <Outlet />
-      </main>
-    </div>
+    <SiteProvider>
+      <div className="flex min-h-screen flex-col">
+        <SiteMetadata />
+        <SiteHeader />
+        <Feedback />
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
+          <Outlet />
+        </main>
+        <SiteFooter />
+      </div>
+    </SiteProvider>
   ),
   errorComponent: RouteError,
   notFoundComponent: () => (

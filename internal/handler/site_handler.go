@@ -1,81 +1,104 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"github.com/akagiyui/oh-my-music-bank/internal/model"
 	"github.com/akagiyui/oh-my-music-bank/internal/service/cache"
+	"github.com/akagiyui/oh-my-music-bank/internal/service/site"
 	pkgerrors "github.com/akagiyui/oh-my-music-bank/pkg/errors"
 	"github.com/akagiyui/oh-my-music-bank/pkg/response"
 )
 
-// SiteHandler 处理站点设置（公开配置 + 管理员设置）。
 type SiteHandler struct {
 	db    *gorm.DB
 	cache *cache.Manager
 }
 
-// NewSiteHandler 创建站点处理器。
 func NewSiteHandler(db *gorm.DB, c *cache.Manager) *SiteHandler {
 	return &SiteHandler{db: db, cache: c}
 }
 
-// PublicConfig 返回前端启动所需的公开配置。
-func (h *SiteHandler) PublicConfig(c *gin.Context) {
-	response.Success(c, gin.H{
-		"brandName":           h.cache.GetSettingDefault("site.brand_name", "Oh My Music Bank"),
-		"registrationEnabled": h.cache.GetSettingDefault("site.registration_enabled", "true") == "true",
-	})
-}
-
-// AdminGetSettings 返回管理员可编辑的设置。
-func (h *SiteHandler) AdminGetSettings(c *gin.Context) {
-	response.Success(c, gin.H{
-		"logRetentionDays":    h.cache.GetSettingDefault("logs.retention_days", "0"),
-		"brandName":           h.cache.GetSettingDefault("site.brand_name", "Oh My Music Bank"),
-		"registrationEnabled": h.cache.GetSettingDefault("site.registration_enabled", "true") == "true",
-	})
-}
-
-// AdminUpdateSettings 更新站点设置。
-func (h *SiteHandler) AdminUpdateSettings(c *gin.Context) {
-	var req struct {
-		LogRetentionDays    *int    `json:"logRetentionDays"`
-		BrandName           *string `json:"brandName"`
-		RegistrationEnabled *bool   `json:"registrationEnabled"`
+// 单次读取数据库快照，避免多实例缓存刷新延迟或逐字段读取混入不同版本。
+func (h *SiteHandler) settings(c *gin.Context) (site.Settings, error) {
+	keys := make([]string, 0)
+	for key := range (site.Settings{}).Values() {
+		keys = append(keys, key)
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest(err.Error()))
+	var rows []model.Setting
+	err := h.db.WithContext(c.Request.Context()).Where("key IN ?", keys).Find(&rows).Error
+	values := make(map[string]string, len(rows))
+	for _, row := range rows {
+		values[row.Key] = row.Value
+	}
+	return site.FromValues(values), err
+}
+
+func (h *SiteHandler) PublicConfig(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	settings, err := h.settings(c)
+	if err != nil {
+		c.JSON(500, pkgerrors.Internal("读取站点配置失败"))
 		return
 	}
-	if req.LogRetentionDays != nil {
-		if *req.LogRetentionDays < 0 || *req.LogRetentionDays > 3650 {
-			c.JSON(400, pkgerrors.BadRequest("保留天数须为0至3650，0表示永久保留"))
-			return
-		}
-		if err := h.cache.SetSetting("logs.retention_days", strconv.Itoa(*req.LogRetentionDays)); err != nil {
-			c.JSON(500, pkgerrors.Internal("保存失败"))
+	// 只公开显式 DTO，不暴露日志策略或未来加入的管理配置。
+	response.Success(c, settings.Config)
+}
+
+func (h *SiteHandler) AdminGetSettings(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	settings, err := h.settings(c)
+	if err != nil {
+		c.JSON(500, pkgerrors.Internal("读取站点配置失败"))
+		return
+	}
+	response.Success(c, settings)
+}
+
+// AdminUpdateSettings 以完整 PUT 替换配置；不接受旧字段和未知字段。
+func (h *SiteHandler) AdminUpdateSettings(c *gin.Context) {
+	var settings site.Settings
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(400, pkgerrors.BadRequest("无法读取配置请求"))
+		return
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&settings); err != nil {
+		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest("配置格式错误："+err.Error()))
+		return
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		c.JSON(400, pkgerrors.BadRequest("请求只能包含一个 JSON 对象"))
+		return
+	}
+	// 完整 PUT 必须包含每个字段；缺失或 null 不能悄悄清空品牌、关闭注册或改变日志策略。
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		c.JSON(400, pkgerrors.BadRequest("配置必须为 JSON 对象"))
+		return
+	}
+	for _, key := range []string{"systemTitle", "siteDescription", "homeTitle", "homeDescription", "logoUrl", "faviconUrl", "footerText", "footerLinkUrl", "apiOrigin", "registrationEnabled", "logRetentionDays"} {
+		if value, ok := fields[key]; !ok || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			c.JSON(400, pkgerrors.BadRequest("完整配置缺少字段："+key))
 			return
 		}
 	}
-	if req.BrandName != nil {
-		if err := h.cache.SetSetting("site.brand_name", *req.BrandName); err != nil {
-			c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to update setting"))
-			return
-		}
+	if err := settings.Normalize(); err != nil {
+		c.JSON(400, pkgerrors.BadRequest(err.Error()))
+		return
 	}
-	if req.RegistrationEnabled != nil {
-		val := "false"
-		if *req.RegistrationEnabled {
-			val = "true"
-		}
-		if err := h.cache.SetSetting("site.registration_enabled", val); err != nil {
-			c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to update setting"))
-			return
-		}
+	if err := h.cache.SetSettings(settings.Values()); err != nil {
+		c.JSON(500, pkgerrors.Internal("保存站点配置失败"))
+		return
 	}
-	response.NoContent(c)
+	c.Header("Cache-Control", "no-store")
+	response.Success(c, settings)
 }

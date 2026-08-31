@@ -23,7 +23,7 @@ for (const width of [1280, 390]) {
         route.fulfill({ status: 400, json: { error: { code: 'invalid_input', message } } }),
       );
       await page.goto(`/${action}`);
-      await expect(page.getByRole('link', { name: '♪ Music Bank' })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Music Bank', exact: true })).toBeVisible();
       if (action === 'register') await page.getByLabel('用户名').fill('tester');
       await page.getByLabel('邮箱').fill('test@example.test');
       await page.getByLabel('密码').fill('test-password');
@@ -83,7 +83,7 @@ test('创建 API Key 失败只显示一次浮层，控制台布局不变', async
 test('搜索和音频错误不推移控件，搜索失败保留已有结果及详情', async ({ page }) => {
   const app = await mockApp(page, false);
   await page.goto('/search');
-  await expect(page.getByRole('link', { name: '♪ Music Bank' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Music Bank', exact: true })).toBeVisible();
   const submit = page.getByRole('button', { name: '搜索', exact: true });
   const before = await layout(page);
   await submit.click();
@@ -97,7 +97,7 @@ test('搜索和音频错误不推移控件，搜索失败保留已有结果及�
   await submit.click();
   await page.getByRole('button', { name: /测试曲目.*测试艺术家/ }).click();
   const audio = page.locator('audio');
-  await expect(audio).toHaveAttribute('src', '/test-audio.wav');
+  await expect(audio).toHaveAttribute('src', 'http://127.0.0.1:5175/test-audio.wav');
   await expect.poll(() => audio.evaluate((element: HTMLAudioElement) => element.readyState)).toBeGreaterThan(0);
   const withResults = await layout(page);
   await audio.dispatchEvent('error');
@@ -120,7 +120,7 @@ test('搜索和音频错误不推移控件，搜索失败保留已有结果及�
     '搜索服务暂不可用',
   );
   expect(await layout(page)).toEqual(withResults);
-  await expect(audio).toHaveAttribute('src', '/test-audio.wav');
+  await expect(audio).toHaveAttribute('src', 'http://127.0.0.1:5175/test-audio.wav');
   app.assertNoErrors();
 });
 

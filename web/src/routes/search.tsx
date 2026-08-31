@@ -1,3 +1,5 @@
+import { useSiteConfig } from '../components/SiteBranding';
+import { resolveAPIOrigin } from '../lib/site';
 import { clearFeedback, notifyError } from '../lib/feedback';
 import { useRef, useState, Fragment } from 'react';
 import { Pagination } from '../components/Pagination';
@@ -15,6 +17,12 @@ export const Route = createFileRoute('/search')({
 });
 const KEY_STORAGE = 'ommb.tryKey';
 function SearchPage() {
+  const site = useSiteConfig();
+  const apiOrigin = resolveAPIOrigin(site.apiOrigin);
+  // API 来源变化时清空旧结果与播放器，避免把不同部署的数据混在同一轮试搜中。
+  return <SearchContent key={apiOrigin} apiOrigin={apiOrigin} />;
+}
+function SearchContent({ apiOrigin }: { apiOrigin: string }) {
   const [apiKey, setApiKey] = useState(localStorage.getItem(KEY_STORAGE) ?? '');
   const [q, setQ] = useState('');
   const [filters, setFilters] = useState<Record<string, string>>({});
@@ -39,7 +47,7 @@ function SearchPage() {
     localStorage.setItem(KEY_STORAGE, key);
     setLoading(true);
     try {
-      const res = await api.open.search(key, q.trim(), nextPage, filters);
+      const res = await api.open.search(apiOrigin, key, q.trim(), nextPage, filters);
       if (token !== searchRequest.current) return;
       setPage(nextPage);
       setTotal(res.total);
@@ -58,7 +66,7 @@ function SearchPage() {
     const token = ++detailRequest.current;
     clearFeedback();
     try {
-      const detail = await api.open.getTrack(apiKey.trim(), t.id);
+      const detail = await api.open.getTrack(apiOrigin, apiKey.trim(), t.id);
       if (token === detailRequest.current) setSelected(detail);
     } catch (err) {
       if (token !== detailRequest.current) return;
@@ -71,6 +79,7 @@ function SearchPage() {
       <div>
         <h1 className="text-2xl font-semibold">试搜音乐</h1>
         <p className="text-sm text-muted-foreground">这里直接调用开放接口，体验 API 的真实返回。</p>
+        <p className="text-xs text-muted-foreground wrap-anywhere">请求地址：{apiOrigin}/api/open/v1</p>
       </div>
 
       <Card>

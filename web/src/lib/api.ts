@@ -1,5 +1,6 @@
 /** 与后端通信的 API 客户端：JWT 令牌管理、自动刷新、统一错误处理。 */
 import { notifyError } from './feedback';
+import type { SiteConfig, SiteSettings } from './site';
 
 const ACCESS_KEY = 'ommb.access';
 const REFRESH_KEY = 'ommb.refresh';
@@ -98,8 +99,14 @@ async function request(path: string, init: RequestInit = {}, auth = false): Prom
   }
 }
 
-async function openRequest(apiKey: string, path: string): Promise<any> {
-  const res = await fetch(path, { headers: { 'X-API-Key': apiKey } });
+async function openRequest(origin: string, apiKey: string, path: string): Promise<any> {
+  // 公开 API 使用独立来源，禁止携带浏览器 Cookie 或跟随重定向转发密钥。
+  const res = await fetch(new URL(path, origin).href, {
+    headers: { 'X-API-Key': apiKey },
+    credentials: 'omit',
+    redirect: 'error',
+    referrerPolicy: 'no-referrer',
+  });
   return parseResponse(res);
 }
 
@@ -330,7 +337,8 @@ export interface IntegrationsConfig {
 
 // ===== 接口集合 =====
 export const api = {
-  site: (): Promise<{ brandName: string; registrationEnabled: boolean }> => request('/api/v1/site').then((r) => r.data),
+  site: (signal?: AbortSignal): Promise<SiteConfig> =>
+    request('/api/v1/site', { signal, cache: 'no-store' }).then((r) => r.data),
 
   auth: {
     register: (b: { username: string; email: string; password: string }) =>
@@ -484,13 +492,12 @@ export const api = {
       remove: (id: string) => request(`/api/v1/admin/audio/${id}`, { method: 'DELETE' }, true),
     },
     site: {
-      get: (): Promise<{
-        brandName: string;
-        registrationEnabled: boolean;
-        logRetentionDays: string;
-      }> => request('/api/v1/admin/site/settings', {}, true).then((r) => r.data),
-      update: (b: { brandName?: string; registrationEnabled?: boolean; logRetentionDays?: number }) =>
-        request('/api/v1/admin/site/settings', { method: 'PUT', body: JSON.stringify(b) }, true),
+      get: (signal?: AbortSignal): Promise<SiteSettings> =>
+        request('/api/v1/admin/site/settings', { signal, cache: 'no-store' }, true).then((r) => r.data),
+      update: (settings: SiteSettings): Promise<SiteSettings> =>
+        request('/api/v1/admin/site/settings', { method: 'PUT', body: JSON.stringify(settings) }, true).then(
+          (r) => r.data,
+        ),
     },
     integrations: {
       test: (provider: string): Promise<{ message: string }> =>
@@ -548,9 +555,22 @@ export const api = {
   },
 
   open: {
-    search: (apiKey: string, q: string, page = 1, filters: Record<string, string> = {}): Promise<Paginated<TrackDTO>> =>
-      openRequest(apiKey, `/api/open/v1/search${qs({ q, page, pageSize: 20, ...filters })}`),
-    getTrack: (apiKey: string, id: string): Promise<TrackDTO> =>
-      openRequest(apiKey, `/api/open/v1/tracks/${id}`).then((r) => r.data),
+    search: (
+      origin: string,
+      apiKey: string,
+      q: string,
+      page = 1,
+      filters: Record<string, string> = {},
+    ): Promise<Paginated<TrackDTO>> =>
+      openRequest(origin, apiKey, `/api/open/v1/search${qs({ q, page, pageSize: 20, ...filters })}`),
+    getTrack: (origin: string, apiKey: string, id: string): Promise<TrackDTO> =>
+      openRequest(origin, apiKey, `/api/open/v1/tracks/${id}`).then((r) => ({
+        ...r.data,
+        // 签名媒体地址为相对 API 路径，必须从 API 来源解析，不能误用 SPA 域名。
+        audios: r.data.audios?.map((audio: AudioDTO) => ({
+          ...audio,
+          url: audio.url ? new URL(audio.url, origin).href : '',
+        })),
+      })),
   },
 };

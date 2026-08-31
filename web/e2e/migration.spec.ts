@@ -123,7 +123,7 @@ test('开放搜索、详情播放和分页保持可用', async ({ page }) => {
   await page.getByPlaceholder('输入歌名 / 别名，如 告白气球').fill('测试');
   await page.getByRole('button', { name: '搜索', exact: true }).click();
   await page.getByRole('button', { name: /测试曲目.*测试艺术家/ }).click();
-  await expect(page.locator('audio')).toHaveAttribute('src', '/test-audio.wav');
+  await expect(page.locator('audio')).toHaveAttribute('src', 'http://127.0.0.1:5175/test-audio.wav');
   await page.getByRole('button', { name: '下一页' }).click();
   await expect(page.getByText('第二页曲目')).toBeVisible();
   await expect(page.locator('audio')).toHaveCount(0);

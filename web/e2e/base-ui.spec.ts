@@ -31,11 +31,12 @@ test('账号设置按钮迁移后仍能提交邮箱和密码', async ({ page }) 
 test('复选框支持标签点击和 Space，并保存布尔值且保持尺寸', async ({ page }) => {
   const app = await mockApp(page);
   await page.goto('/admin/settings');
-  await expect(page.getByLabel('站点名称')).toHaveValue('Music Bank');
+  await expect(page.getByLabel('系统标题')).toHaveValue('Music Bank');
   const checkbox = page.getByRole('checkbox', { name: '开放注册' });
   await expect(checkbox).toBeChecked();
   await expect(checkbox).toHaveCSS('width', '16px');
   await expect(checkbox).toHaveCSS('height', '16px');
+  await checkbox.scrollIntoViewIfNeeded();
   const before = await checkbox.boundingBox();
   await page.getByText('开放注册', { exact: true }).click();
   await expect(checkbox).not.toBeChecked();

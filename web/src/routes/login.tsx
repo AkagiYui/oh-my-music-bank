@@ -1,3 +1,4 @@
+import { useSiteConfig } from '../components/SiteBranding';
 import { useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { clearFeedback, notifyError } from '../lib/feedback';
@@ -11,6 +12,7 @@ export const Route = createFileRoute('/login')({
 });
 function LoginPage() {
   const navigate = useNavigate();
+  const site = useSiteConfig();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -53,12 +55,14 @@ function LoginPage() {
               {loading ? '登录中…' : '登录'}
             </Button>
           </form>
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            还没有账号？
-            <Link to="/register" className="text-primary hover:underline">
-              注册
-            </Link>
-          </p>
+          {site.registrationEnabled && (
+            <p className="mt-4 text-center text-sm text-muted-foreground">
+              还没有账号？
+              <Link to="/register" className="text-primary hover:underline">
+                注册
+              </Link>
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

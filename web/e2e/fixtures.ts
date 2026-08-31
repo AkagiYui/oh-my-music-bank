@@ -1,5 +1,20 @@
 import { expect, type Page } from '@playwright/test';
+import type { SiteSettings } from '../src/lib/site';
 import type { TrackDTO } from '../src/lib/api';
+
+export const defaultSiteSettings: SiteSettings = {
+  systemTitle: 'Music Bank',
+  siteDescription: '测试站点描述',
+  homeTitle: '自定义音源系统',
+  homeDescription: '测试首页描述',
+  logoUrl: '',
+  faviconUrl: '',
+  footerText: '',
+  footerLinkUrl: '',
+  apiOrigin: '',
+  registrationEnabled: true,
+  logRetentionDays: 0,
+};
 
 const user = {
   id: 'user-1',
@@ -60,6 +75,7 @@ const job = {
 };
 
 export async function mockApp(page: Page, loggedIn = true) {
+  let settings = { ...defaultSiteSettings };
   const errors: string[] = [];
   const requests: { path: string; method: string; body: Record<string, unknown>; params: URLSearchParams }[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -116,9 +132,13 @@ export async function mockApp(page: Page, loggedIn = true) {
     if (path.endsWith('/auth/login') || path.endsWith('/auth/register'))
       response = { data: { user, accessToken: 'test-access', refreshToken: 'test-refresh' } };
     else if (path.endsWith('/auth/me')) response = { data: user };
-    else if (path.endsWith('/site') || path.endsWith('/site/settings'))
-      response = { data: { brandName: 'Music Bank', registrationEnabled: true, logRetentionDays: '0' } };
-    else if (path.endsWith('/stats/overview'))
+    else if (path.endsWith('/site/settings')) {
+      if (method === 'PUT') settings = body as unknown as SiteSettings;
+      response = { data: settings };
+    } else if (path.endsWith('/site')) {
+      const { logRetentionDays: _logRetentionDays, ...site } = settings;
+      response = { data: site };
+    } else if (path.endsWith('/stats/overview'))
       response = {
         data: {
           users: 2,

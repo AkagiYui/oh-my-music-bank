@@ -1,3 +1,4 @@
+import { useSiteConfig } from '../components/SiteBranding';
 import { useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { clearFeedback, notifyError } from '../lib/feedback';
@@ -11,6 +12,7 @@ export const Route = createFileRoute('/register')({
 });
 function RegisterPage() {
   const navigate = useNavigate();
+  const site = useSiteConfig();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,6 +30,16 @@ function RegisterPage() {
       setLoading(false);
     }
   }
+  if (!site.registrationEnabled)
+    return (
+      <div className="mx-auto flex max-w-sm flex-col gap-4 py-10">
+        <h1 className="text-2xl font-semibold">注册已关闭</h1>
+        <p>请联系管理员获取账号。</p>
+        <Link to="/login" className="text-primary hover:underline">
+          前往登录
+        </Link>
+      </div>
+    );
   return (
     <div className="mx-auto max-w-sm py-10">
       <Card>

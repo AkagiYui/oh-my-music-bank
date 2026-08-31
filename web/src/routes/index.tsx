@@ -1,3 +1,5 @@
+import { useSiteConfig } from '../components/SiteBranding';
+import { resolveAPIOrigin } from '../lib/site';
 import { Badge } from '../components/ui/badge';
 import { Fragment } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
@@ -36,17 +38,21 @@ function Step(props: { n: number; title: string; children: React.ReactNode }) {
 }
 function Home() {
   const navigate = useNavigate();
+  const site = useSiteConfig();
+  const apiOrigin = resolveAPIOrigin(site.apiOrigin);
   return (
     <div className="space-y-10">
       <section className="space-y-4 py-6 text-center">
-        <h1 className="text-4xl font-bold tracking-tight">自定义音源系统</h1>
-        <p className="mx-auto max-w-xl text-muted-foreground">
-          管理员上传音频，系统自动解析信息并分发到对象存储；你只需一个 API Key 即可检索音乐与获取播放地址。
-        </p>
+        <h1 className="text-4xl font-bold tracking-tight wrap-anywhere">{site.homeTitle}</h1>
+        {site.homeDescription && (
+          <p className="mx-auto max-w-xl whitespace-pre-wrap wrap-anywhere text-muted-foreground">
+            {site.homeDescription}
+          </p>
+        )}
         <div className="flex justify-center gap-3">
           <Button onClick={() => navigate({ to: '/search' })}>立即试搜</Button>
-          <Button variant="outline" onClick={() => navigate({ to: '/register' })}>
-            注册获取 API Key
+          <Button variant="outline" onClick={() => navigate({ to: site.registrationEnabled ? '/register' : '/login' })}>
+            {site.registrationEnabled ? '注册获取 API Key' : '登录获取 API Key'}
           </Button>
         </div>
       </section>
@@ -55,8 +61,12 @@ function Home() {
         <h2 className="text-2xl font-semibold">三步接入</h2>
         <Card>
           <CardContent className="space-y-6 p-6">
-            <Step n={1} title="注册并登录">
-              <p className="text-sm text-muted-foreground">首个注册的账号自动成为管理员。</p>
+            <Step n={1} title={site.registrationEnabled ? '注册并登录' : '登录账号'}>
+              <p className="text-sm text-muted-foreground">
+                {site.registrationEnabled
+                  ? '创建账号后，在控制台管理你的 API Key。'
+                  : '当前站点未开放注册，请联系管理员获取账号。'}
+              </p>
             </Step>
             <Step n={2} title="在控制台创建 API Key">
               <p className="text-sm text-muted-foreground">
@@ -66,7 +76,7 @@ function Home() {
             </Step>
             <Step n={3} title="带上 Key 调用开放接口">
               <Code>{`curl -H "X-API-Key: omb_你的密钥" \\
-  "https://你的域名/api/open/v1/search?q=告白气球"`}</Code>
+  "${apiOrigin}/api/open/v1/search?q=告白气球"`}</Code>
             </Step>
           </CardContent>
         </Card>
@@ -83,6 +93,9 @@ function Home() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <p className="text-sm wrap-anywhere">
+              API 地址：<code>{apiOrigin}/api/open/v1</code>
+            </p>
             <div className="divide-y rounded-none border">
               {(ENDPOINTS ?? []).map((e, index) => (
                 <Fragment key={index}>

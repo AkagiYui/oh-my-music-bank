@@ -1,6 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { api } from '../lib/api';
+import { BrandLogo, useSiteConfig } from './SiteBranding';
 import { logout, useAuth } from '../stores/auth';
 import { Button } from './ui/button';
 function NavLink(props: { to: string; children: React.ReactNode }) {
@@ -19,16 +18,13 @@ function NavLink(props: { to: string; children: React.ReactNode }) {
 export function SiteHeader() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
-  const { data: site } = useQuery({
-    queryKey: ['SiteHeader:site'],
-    queryFn: () => api.site().catch(() => ({ brandName: 'Oh My Music Bank' })),
-  });
+  const site = useSiteConfig();
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
       <div className="mx-auto flex min-h-14 max-w-5xl flex-wrap items-center gap-2 px-4 py-2">
-        <Link to="/" className="mr-2 flex items-center gap-2 font-semibold">
-          <span className="text-primary">♪</span>
-          {site?.brandName ?? 'Oh My Music Bank'}
+        <Link to="/" className="mr-2 flex min-w-0 items-center gap-2 font-semibold" title={site.systemTitle}>
+          <BrandLogo url={site.logoUrl} />
+          <span className="max-w-64 truncate">{site.systemTitle}</span>
         </Link>
         <nav className="flex items-center gap-1 text-sm">
           <NavLink to="/">首页</NavLink>
@@ -63,9 +59,11 @@ export function SiteHeader() {
               <Button size="sm" variant="ghost" onClick={() => navigate({ to: '/login' })}>
                 登录
               </Button>
-              <Button size="sm" onClick={() => navigate({ to: '/register' })}>
-                注册
-              </Button>
+              {site.registrationEnabled && (
+                <Button size="sm" onClick={() => navigate({ to: '/register' })}>
+                  注册
+                </Button>
+              )}
             </>
           )}
         </div>
