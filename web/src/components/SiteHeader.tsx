@@ -30,14 +30,13 @@ export function SiteHeader() {
           <NavLink to="/">首页</NavLink>
           <NavLink to="/search">试搜</NavLink>
         </nav>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2 text-sm">
           {user ? (
             <>
               {isAdmin ? (
                 <>
-                  <Button size="sm" variant="ghost" onClick={() => navigate({ to: '/admin' })}>
-                    管理
-                  </Button>
+                  <NavLink to="/music">曲库管理</NavLink>
+                  <NavLink to="/admin">系统管理</NavLink>
                 </>
               ) : null}
               <Button size="sm" variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>

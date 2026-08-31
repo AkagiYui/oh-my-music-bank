@@ -7,13 +7,14 @@ test('所有页面在生产构建中正常渲染，浏览器无 React 错误', a
     ['/', '自定义音源系统'],
     ['/search', '试搜音乐'],
     ['/dashboard', '账号设置'],
-    ['/admin', '概览'],
-    ['/admin/upload', '批量上传音频'],
-    ['/admin/jobs', '收录任务'],
-    ['/admin/import', '从哔哩哔哩导入'],
-    ['/admin/tracks', '曲目管理'],
-    ['/admin/artists', '艺术家管理'],
-    ['/admin/albums', '专辑管理'],
+    ['/admin', '系统概览'],
+    ['/music', '曲库概览'],
+    ['/music/upload', '批量上传音频'],
+    ['/music/jobs', '收录任务'],
+    ['/music/import', '从哔哩哔哩导入'],
+    ['/music/tracks', '曲目管理'],
+    ['/music/artists', '艺术家管理'],
+    ['/music/albums', '专辑管理'],
     ['/admin/api-keys', 'API Key 管理'],
     ['/admin/logs', '调用日志'],
     ['/admin/users', '用户管理'],
@@ -33,7 +34,7 @@ test('所有页面在生产构建中正常渲染，浏览器无 React 错误', a
 
 test('匿名管理入口不加载管理数据，登录和退出更新权限', async ({ page }) => {
   const app = await mockApp(page, false);
-  await page.goto('/admin/tracks');
+  await page.goto('/music/tracks');
   await expect(page).toHaveURL(/\/$/);
   expect(app.requests.some((r) => r.path.includes('/admin/'))).toBe(false);
   await page.goto('/login');
@@ -41,7 +42,7 @@ test('匿名管理入口不加载管理数据，登录和退出更新权限', as
   await page.getByLabel('密码').fill('test-password');
   await page.getByRole('button', { name: '登录', exact: true }).last().click();
   await expect(page).toHaveURL(/\/admin$/);
-  await expect(page.getByRole('heading', { name: '概览', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '系统概览', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '退出', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   expect(await page.evaluate(() => localStorage.getItem('ommb.access'))).toBeNull();
@@ -50,7 +51,7 @@ test('匿名管理入口不加载管理数据，登录和退出更新权限', as
 
 test('曲目分页及编辑保留 ID、字段和 shadcn 复选框语义', async ({ page }) => {
   const app = await mockApp(page);
-  await page.goto('/admin/tracks');
+  await page.goto('/music/tracks');
   await page.getByRole('button', { name: '下一页' }).click();
   await expect(page.getByText('第二页曲目', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '编辑', exact: true }).click();
@@ -66,7 +67,7 @@ test('曲目分页及编辑保留 ID、字段和 shadcn 复选框语义', async 
 
 test('专辑碟号和曲序使用当前输入提交', async ({ page }) => {
   const app = await mockApp(page);
-  await page.goto('/admin/albums');
+  await page.goto('/music/albums');
   await page.getByRole('button', { name: '编辑', exact: true }).click();
   await expect(page.getByLabel('碟号')).toHaveValue('1');
   await page.getByLabel('碟号').fill('2');
@@ -80,7 +81,7 @@ test('专辑碟号和曲序使用当前输入提交', async ({ page }) => {
 
 test('批量上传创建独立任务并清空成功文件', async ({ page }) => {
   const app = await mockApp(page);
-  await page.goto('/admin/upload');
+  await page.goto('/music/upload');
   await page.locator('input[type=file]').setInputFiles([
     { name: 'a.wav', mimeType: 'audio/wav', buffer: Buffer.from('test-a') },
     { name: 'b.wav', mimeType: 'audio/wav', buffer: Buffer.from('test-b') },
@@ -95,7 +96,7 @@ test('批量上传创建独立任务并清空成功文件', async ({ page }) => 
 
 test('哔哩哔哩分 P 切换和批量选中提交正确任务', async ({ page }) => {
   const app = await mockApp(page);
-  await page.goto('/admin/import');
+  await page.goto('/music/import');
   await page.getByRole('button', { name: '测试收藏夹 (2)' }).click();
   await page.getByRole('checkbox', { name: '选择 测试视频' }).check();
   await page.getByRole('button', { name: '批量导入所选视频的全部分 P' }).click();
@@ -182,7 +183,7 @@ test('搜索请求晚到不会覆盖重新渲染后的新结果', async ({ page 
 test('手机宽度下首页和管理布局无横向溢出', async ({ page }) => {
   const app = await mockApp(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const path of ['/', '/admin/tracks', '/admin/jobs']) {
+  for (const path of ['/', '/admin', '/music', '/music/tracks', '/music/jobs']) {
     await page.goto(path);
     await expect(page.getByRole('button', { name: '退出' })).toBeVisible();
     const overflow = await page.evaluate(() => ({

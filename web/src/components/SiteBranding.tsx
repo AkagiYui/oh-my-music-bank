@@ -46,15 +46,16 @@ const pageTitles: Record<string, string> = {
   '/register': '注册',
   '/search': '试搜音乐',
   '/dashboard': '控制台',
-  '/admin': '管理概览',
+  '/admin': '系统概览',
+  '/music': '曲库概览',
   '/admin/settings': '站点设置',
   '/admin/integrations': '集成',
-  '/admin/upload': '上传音频',
-  '/admin/jobs': '收录任务',
-  '/admin/import': '哔哩哔哩导入',
-  '/admin/tracks': '曲目',
-  '/admin/artists': '艺术家',
-  '/admin/albums': '专辑',
+  '/music/upload': '上传音频',
+  '/music/jobs': '收录任务',
+  '/music/import': '哔哩哔哩导入',
+  '/music/tracks': '曲目',
+  '/music/artists': '艺术家',
+  '/music/albums': '专辑',
   '/admin/api-keys': 'API Key',
   '/admin/logs': '调用日志',
   '/admin/users': '用户',
@@ -62,7 +63,7 @@ const pageTitles: Record<string, string> = {
 export function SiteMetadata() {
   const site = useSiteConfig();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const page = pathname === '/' ? site.homeTitle : (pageTitles[pathname] ?? '页面不存在');
+  const page = pathname === '/' ? site.homeTitle : (pageTitles[pathname.replace(/\/$/, '')] ?? '页面不存在');
   useEffect(() => {
     document.title = page === site.systemTitle ? site.systemTitle : `${page} · ${site.systemTitle}`;
     // 只写文本属性，不解释管理员文案中的 HTML；清空配置时同步移除旧图标。

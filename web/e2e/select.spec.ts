@@ -41,7 +41,10 @@ for (const { width, dark } of [
 
     await quality.focus();
     await quality.press('Enter');
+    // Portal 的焦点交接异步完成，等选中项获得焦点后再发送后续键盘事件。
+    await expect(page.getByRole('option', { name: '无损', exact: true })).toBeFocused();
     await page.keyboard.press('Home');
+    await expect(page.getByRole('option', { name: '全部音质', exact: true })).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(quality).toHaveText('全部音质');
     await expect(quality).toBeFocused();
@@ -53,6 +56,7 @@ for (const { width, dark } of [
     expect(params.get('language')).toBe('中文');
 
     await quality.click();
+    await expect(page.getByRole('option', { name: '全部音质', exact: true })).toBeFocused();
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Escape');
     await expect(page.getByRole('listbox')).toHaveCount(0);
@@ -98,7 +102,7 @@ test('角色选择提交原始角色值，刷新后显示服务端结果', async
 
 test('分 P 保留数字 CID 和裁剪重置，识别服务的禁用项不能选中', async ({ page }, testInfo) => {
   const app = await mockApp(page);
-  await page.goto('/admin/import');
+  await page.goto('/music/import');
   await page.getByPlaceholder('或直接输入 BV 号（如 BV1xx411c7mD）').fill('BVtest');
   await page.getByRole('button', { name: '打开', exact: true }).click();
   const parts = page.getByRole('combobox', { name: '视频分 P' });

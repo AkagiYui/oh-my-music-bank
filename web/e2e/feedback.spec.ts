@@ -126,7 +126,7 @@ test('搜索和音频错误不推移控件，搜索失败保留已有结果及�
 
 test('导入裁剪和集成测试失败使用浮层并保留页面内容', async ({ page }) => {
   const app = await mockApp(page);
-  await page.goto('/admin/import');
+  await page.goto('/music/import');
   await page.getByRole('button', { name: '测试收藏夹 (2)' }).click();
   const video = page.getByRole('button', { name: /测试视频.*测试 UP/ });
   await video.click();

@@ -37,13 +37,14 @@ for (const width of [1280, 390]) {
       ['/', '自定义音源系统'],
       ['/search', '试搜音乐'],
       ['/dashboard', '账号设置'],
-      ['/admin', '概览'],
-      ['/admin/upload', '批量上传音频'],
-      ['/admin/jobs', '收录任务'],
-      ['/admin/import', '从哔哩哔哩导入'],
-      ['/admin/tracks', '曲目管理'],
-      ['/admin/artists', '艺术家管理'],
-      ['/admin/albums', '专辑管理'],
+      ['/admin', '系统概览'],
+      ['/music', '曲库概览'],
+      ['/music/upload', '批量上传音频'],
+      ['/music/jobs', '收录任务'],
+      ['/music/import', '从哔哩哔哩导入'],
+      ['/music/tracks', '曲目管理'],
+      ['/music/artists', '艺术家管理'],
+      ['/music/albums', '专辑管理'],
       ['/admin/api-keys', 'API Key 管理'],
       ['/admin/logs', '调用日志'],
       ['/admin/users', '用户管理'],
@@ -69,7 +70,7 @@ for (const width of [1280, 390]) {
     const app = await mockApp(page);
     await page.setViewportSize({ width, height: 844 });
 
-    await page.goto('/admin/artists');
+    await page.goto('/music/artists');
     await page.getByRole('button', { name: '编辑', exact: true }).click();
     await expect(page.locator('[data-slot="badge"]').filter({ hasText: '艺名' })).toBeVisible();
     await expect(page.locator('[data-slot="avatar-fallback"]')).toBeVisible();
@@ -82,12 +83,12 @@ for (const width of [1280, 390]) {
     await expectLyraSurfaces(page);
     await page.screenshot({ path: testInfo.outputPath('artist-editor.png'), fullPage: true });
 
-    await page.goto('/admin/albums');
+    await page.goto('/music/albums');
     await page.getByRole('button', { name: '编辑', exact: true }).click();
     await expect(page.getByLabel('碟号')).toHaveValue('1');
     await expectLyraSurfaces(page);
 
-    await page.goto('/admin/tracks');
+    await page.goto('/music/tracks');
     await page.getByRole('button', { name: '编辑', exact: true }).click();
     await expect(page.locator('audio')).toHaveAttribute('src', '/test-audio.wav');
     await expect(page.locator('[data-slot="badge"]').filter({ hasText: 'standard' })).toBeVisible();
@@ -98,7 +99,7 @@ for (const width of [1280, 390]) {
     await expect(page.getByText('omb_created_once', { exact: true })).toBeVisible();
     await expectLyraSurfaces(page);
 
-    await page.goto('/admin/import');
+    await page.goto('/music/import');
     const folder = page.getByRole('button', { name: '测试收藏夹 (2)' });
     await folder.click();
     await expect(folder).toHaveAttribute('aria-pressed', 'true');

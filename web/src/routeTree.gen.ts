@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MusicRouteImport } from './routes/music'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
@@ -27,6 +28,13 @@ import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminTracksRouteImport } from './routes/admin.tracks'
 import { Route as AdminUploadRouteImport } from './routes/admin.upload'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as MusicIndexRouteImport } from './routes/music.index'
+import { Route as MusicAlbumsRouteImport } from './routes/music.albums'
+import { Route as MusicArtistsRouteImport } from './routes/music.artists'
+import { Route as MusicImportRouteImport } from './routes/music.import'
+import { Route as MusicJobsRouteImport } from './routes/music.jobs'
+import { Route as MusicTracksRouteImport } from './routes/music.tracks'
+import { Route as MusicUploadRouteImport } from './routes/music.upload'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -46,6 +54,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MusicRoute = MusicRouteImport.update({
+  id: '/music',
+  path: '/music',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RegisterRoute = RegisterRouteImport.update({
@@ -118,12 +131,48 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AdminRoute,
 } as any)
+const MusicIndexRoute = MusicIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MusicRoute,
+} as any)
+const MusicAlbumsRoute = MusicAlbumsRouteImport.update({
+  id: '/albums',
+  path: '/albums',
+  getParentRoute: () => MusicRoute,
+} as any)
+const MusicArtistsRoute = MusicArtistsRouteImport.update({
+  id: '/artists',
+  path: '/artists',
+  getParentRoute: () => MusicRoute,
+} as any)
+const MusicImportRoute = MusicImportRouteImport.update({
+  id: '/import',
+  path: '/import',
+  getParentRoute: () => MusicRoute,
+} as any)
+const MusicJobsRoute = MusicJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => MusicRoute,
+} as any)
+const MusicTracksRoute = MusicTracksRouteImport.update({
+  id: '/tracks',
+  path: '/tracks',
+  getParentRoute: () => MusicRoute,
+} as any)
+const MusicUploadRoute = MusicUploadRouteImport.update({
+  id: '/upload',
+  path: '/upload',
+  getParentRoute: () => MusicRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/music': typeof MusicRouteWithChildren
   '/register': typeof RegisterRoute
   '/search': typeof SearchRoute
   '/admin/albums': typeof AdminAlbumsRoute
@@ -137,7 +186,14 @@ export interface FileRoutesByFullPath {
   '/admin/tracks': typeof AdminTracksRoute
   '/admin/upload': typeof AdminUploadRoute
   '/admin/users': typeof AdminUsersRoute
+  '/music/albums': typeof MusicAlbumsRoute
+  '/music/artists': typeof MusicArtistsRoute
+  '/music/import': typeof MusicImportRoute
+  '/music/jobs': typeof MusicJobsRoute
+  '/music/tracks': typeof MusicTracksRoute
+  '/music/upload': typeof MusicUploadRoute
   '/admin/': typeof AdminIndexRoute
+  '/music/': typeof MusicIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -156,7 +212,14 @@ export interface FileRoutesByTo {
   '/admin/tracks': typeof AdminTracksRoute
   '/admin/upload': typeof AdminUploadRoute
   '/admin/users': typeof AdminUsersRoute
+  '/music/albums': typeof MusicAlbumsRoute
+  '/music/artists': typeof MusicArtistsRoute
+  '/music/import': typeof MusicImportRoute
+  '/music/jobs': typeof MusicJobsRoute
+  '/music/tracks': typeof MusicTracksRoute
+  '/music/upload': typeof MusicUploadRoute
   '/admin': typeof AdminIndexRoute
+  '/music': typeof MusicIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -164,6 +227,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/music': typeof MusicRouteWithChildren
   '/register': typeof RegisterRoute
   '/search': typeof SearchRoute
   '/admin/albums': typeof AdminAlbumsRoute
@@ -177,7 +241,14 @@ export interface FileRoutesById {
   '/admin/tracks': typeof AdminTracksRoute
   '/admin/upload': typeof AdminUploadRoute
   '/admin/users': typeof AdminUsersRoute
+  '/music/albums': typeof MusicAlbumsRoute
+  '/music/artists': typeof MusicArtistsRoute
+  '/music/import': typeof MusicImportRoute
+  '/music/jobs': typeof MusicJobsRoute
+  '/music/tracks': typeof MusicTracksRoute
+  '/music/upload': typeof MusicUploadRoute
   '/admin/': typeof AdminIndexRoute
+  '/music/': typeof MusicIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -186,6 +257,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/dashboard'
     | '/login'
+    | '/music'
     | '/register'
     | '/search'
     | '/admin/albums'
@@ -199,7 +271,14 @@ export interface FileRouteTypes {
     | '/admin/tracks'
     | '/admin/upload'
     | '/admin/users'
+    | '/music/albums'
+    | '/music/artists'
+    | '/music/import'
+    | '/music/jobs'
+    | '/music/tracks'
+    | '/music/upload'
     | '/admin/'
+    | '/music/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -218,13 +297,21 @@ export interface FileRouteTypes {
     | '/admin/tracks'
     | '/admin/upload'
     | '/admin/users'
+    | '/music/albums'
+    | '/music/artists'
+    | '/music/import'
+    | '/music/jobs'
+    | '/music/tracks'
+    | '/music/upload'
     | '/admin'
+    | '/music'
   id:
     | '__root__'
     | '/'
     | '/admin'
     | '/dashboard'
     | '/login'
+    | '/music'
     | '/register'
     | '/search'
     | '/admin/albums'
@@ -238,7 +325,14 @@ export interface FileRouteTypes {
     | '/admin/tracks'
     | '/admin/upload'
     | '/admin/users'
+    | '/music/albums'
+    | '/music/artists'
+    | '/music/import'
+    | '/music/jobs'
+    | '/music/tracks'
+    | '/music/upload'
     | '/admin/'
+    | '/music/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -246,6 +340,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
+  MusicRoute: typeof MusicRouteWithChildren
   RegisterRoute: typeof RegisterRoute
   SearchRoute: typeof SearchRoute
 }
@@ -278,6 +373,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/music': {
+      id: '/music'
+      path: '/music'
+      fullPath: '/music'
+      preLoaderRoute: typeof MusicRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/register': {
@@ -378,6 +480,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/music/': {
+      id: '/music/'
+      path: '/'
+      fullPath: '/music/'
+      preLoaderRoute: typeof MusicIndexRouteImport
+      parentRoute: typeof MusicRoute
+    }
+    '/music/albums': {
+      id: '/music/albums'
+      path: '/albums'
+      fullPath: '/music/albums'
+      preLoaderRoute: typeof MusicAlbumsRouteImport
+      parentRoute: typeof MusicRoute
+    }
+    '/music/artists': {
+      id: '/music/artists'
+      path: '/artists'
+      fullPath: '/music/artists'
+      preLoaderRoute: typeof MusicArtistsRouteImport
+      parentRoute: typeof MusicRoute
+    }
+    '/music/import': {
+      id: '/music/import'
+      path: '/import'
+      fullPath: '/music/import'
+      preLoaderRoute: typeof MusicImportRouteImport
+      parentRoute: typeof MusicRoute
+    }
+    '/music/jobs': {
+      id: '/music/jobs'
+      path: '/jobs'
+      fullPath: '/music/jobs'
+      preLoaderRoute: typeof MusicJobsRouteImport
+      parentRoute: typeof MusicRoute
+    }
+    '/music/tracks': {
+      id: '/music/tracks'
+      path: '/tracks'
+      fullPath: '/music/tracks'
+      preLoaderRoute: typeof MusicTracksRouteImport
+      parentRoute: typeof MusicRoute
+    }
+    '/music/upload': {
+      id: '/music/upload'
+      path: '/upload'
+      fullPath: '/music/upload'
+      preLoaderRoute: typeof MusicUploadRouteImport
+      parentRoute: typeof MusicRoute
+    }
   }
 }
 
@@ -413,11 +564,34 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface MusicRouteChildren {
+  MusicAlbumsRoute: typeof MusicAlbumsRoute
+  MusicArtistsRoute: typeof MusicArtistsRoute
+  MusicImportRoute: typeof MusicImportRoute
+  MusicJobsRoute: typeof MusicJobsRoute
+  MusicTracksRoute: typeof MusicTracksRoute
+  MusicUploadRoute: typeof MusicUploadRoute
+  MusicIndexRoute: typeof MusicIndexRoute
+}
+
+const MusicRouteChildren: MusicRouteChildren = {
+  MusicAlbumsRoute: MusicAlbumsRoute,
+  MusicArtistsRoute: MusicArtistsRoute,
+  MusicImportRoute: MusicImportRoute,
+  MusicJobsRoute: MusicJobsRoute,
+  MusicTracksRoute: MusicTracksRoute,
+  MusicUploadRoute: MusicUploadRoute,
+  MusicIndexRoute: MusicIndexRoute,
+}
+
+const MusicRouteWithChildren = MusicRoute._addFileChildren(MusicRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
+  MusicRoute: MusicRouteWithChildren,
   RegisterRoute: RegisterRoute,
   SearchRoute: SearchRoute,
 }

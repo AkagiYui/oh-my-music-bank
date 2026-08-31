@@ -4,7 +4,7 @@ import { mockApp, track } from './fixtures';
 test('站内切换、已访问分页和详情重新展开复用缓存', async ({ page }) => {
   const app = await mockApp(page);
   const count = (path: string) => app.requests.filter((r) => r.method === 'GET' && r.path === path).length;
-  await page.goto('/admin/tracks');
+  await page.goto('/music/tracks');
   await expect(page.getByText('测试曲目', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '编辑', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: '可被搜索' })).toBeChecked();
@@ -35,7 +35,7 @@ test('缓存过期后先显示数据，后台刷新不禁用已有分页', async
   const app = await mockApp(page);
   const now = Date.now();
   await page.clock.setFixedTime(now);
-  await page.goto('/admin/tracks');
+  await page.goto('/music/tracks');
   await expect(page.getByText('测试曲目', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: '艺术家', exact: true }).click();
   await expect(page.getByText('测试艺术家', { exact: true })).toBeVisible();
@@ -78,7 +78,7 @@ test('删除曲目后刷新当前页，并让之前访问的分页和关联列�
     const title = deleted ? `更新后的第${current}页` : `原来的第${current}页`;
     await route.fulfill({ json: { data: [{ ...track, title }], total: 101, page: current, pageSize: 50 } });
   });
-  await page.goto('/admin/artists');
+  await page.goto('/music/artists');
   await expect(page.getByText('测试艺术家', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: '曲目', exact: true }).click();
   await expect(page.getByText('原来的第1页')).toBeVisible();
@@ -97,7 +97,7 @@ test('删除曲目后刷新当前页，并让之前访问的分页和关联列�
 
 test('退出再登录后不会复用上一会话的私有缓存', async ({ page }) => {
   const app = await mockApp(page);
-  await page.goto('/admin/tracks');
+  await page.goto('/music/tracks');
   await expect(page.getByText('测试曲目', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '退出', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
@@ -106,6 +106,7 @@ test('退出再登录后不会复用上一会话的私有缓存', async ({ page 
   await page.getByLabel('密码').fill('test-password');
   await page.getByRole('button', { name: '登录', exact: true }).last().click();
   await expect(page).toHaveURL(/\/admin$/);
+  await page.getByRole('banner').getByRole('link', { name: '曲库管理', exact: true }).click();
   await page.getByRole('link', { name: '曲目', exact: true }).click();
   await expect(page.getByText('测试曲目', { exact: true })).toBeVisible();
   expect(app.requests.filter((r) => r.method === 'GET' && r.path === '/api/v1/admin/tracks')).toHaveLength(2);

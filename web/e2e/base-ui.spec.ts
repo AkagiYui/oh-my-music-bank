@@ -61,7 +61,7 @@ test('复选框支持标签点击和 Space，并保存布尔值且保持尺寸',
 
 test('任务进度的视觉填充与无障碍数值一致', async ({ page }) => {
   const app = await mockApp(page);
-  await page.goto('/admin/jobs');
+  await page.goto('/music/jobs');
   const progress = page.getByRole('progressbar', { name: '收录进度' });
   await expect(progress).toHaveAttribute('aria-valuenow', '30');
   await expect(progress).toHaveAttribute('aria-valuemax', '100');

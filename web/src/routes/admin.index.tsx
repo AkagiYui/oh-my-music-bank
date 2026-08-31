@@ -2,25 +2,11 @@ import { Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { api, type TimeseriesPoint } from '../lib/api';
+import { StatCard } from '../components/StatCard';
 import { Card, CardContent } from '../components/ui/card';
 export const Route = createFileRoute('/admin/')({
   component: Overview,
 });
-function StatCard(props: { label: string; value: number | undefined; sub?: string }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="text-xs text-muted-foreground">{props.label}</div>
-        <div className="text-2xl font-semibold tabular-nums">{props.value ?? '—'}</div>
-        {props.sub ? (
-          <>
-            <div className="text-xs text-muted-foreground">{props.sub}</div>
-          </>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
 function BarChart(props: { data: TimeseriesPoint[]; field: 'requests' | 'registrations'; color: string }) {
   const w = 640;
   const h = 120;
@@ -56,15 +42,10 @@ function Overview() {
   });
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">概览</h1>
+      <h1 className="text-2xl font-semibold">系统概览</h1>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard label="用户" value={stats?.users} sub={`今日新增 ${stats?.newUsersToday ?? 0}`} />
-        <StatCard label="曲目" value={stats?.tracks} />
-        <StatCard label="艺术家" value={stats?.artists} />
-        <StatCard label="专辑" value={stats?.albums} />
-        <StatCard label="分发音频" value={stats?.audios} />
-        <StatCard label="原始音频" value={stats?.originAudios} />
         <StatCard label="API Key" value={stats?.apiKeys} />
         <StatCard label="API 调用" value={stats?.totalRequests} sub={`今日 ${stats?.requestsToday ?? 0}`} />
       </div>
