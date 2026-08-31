@@ -39,7 +39,7 @@ function LogsPage() {
             <span className="text-sm text-muted-foreground">共 {resp?.total ?? 0} 条</span>
           </div>
 
-          <div className="overflow-x-auto rounded-md border">
+          <div className="overflow-x-auto rounded-none border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
                 <tr>

@@ -7,7 +7,7 @@ function NavLink(props: { to: string; children: React.ReactNode }) {
   return (
     <Link
       to={props.to}
-      className="rounded-md px-3 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
+      className="rounded-none px-3 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
       activeProps={{ className: 'text-foreground font-medium' }}
       activeOptions={{ exact: props.to === '/' }}
     >

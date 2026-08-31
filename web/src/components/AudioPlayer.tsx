@@ -78,7 +78,7 @@ function PlayerSession({ sources, title }: { sources: PlayerSource[]; title?: st
     }
   }
   return (
-    <div className="rounded-lg border bg-card p-3">
+    <div className="rounded-none border bg-card p-3">
       <audio
         ref={audioRef}
         preload="metadata"
@@ -102,7 +102,7 @@ function PlayerSession({ sources, title }: { sources: PlayerSource[]; title?: st
       <div className="flex items-center gap-3">
         <Button
           size="icon"
-          className="shrink-0 rounded-full"
+          className="shrink-0"
           disabled={!url}
           aria-label={playing ? '暂停' : '播放'}
           onClick={() => {

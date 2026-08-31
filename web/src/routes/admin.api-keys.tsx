@@ -1,5 +1,7 @@
+import { Badge } from '../components/ui/badge';
 import { useState, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { CheckIcon } from 'lucide-react';
 import { Pagination } from '../components/Pagination';
 import { createFileRoute } from '@tanstack/react-router';
 import { api } from '../lib/api';
@@ -48,7 +50,7 @@ function ApiKeysPage() {
 
           {(keys() ?? []).length > 0 ? (
             <>
-              <div className="divide-y rounded-md border">
+              <div className="divide-y rounded-none border">
                 {(keys() ?? []).map((k, index) => (
                   <Fragment key={k.id}>
                     <div className="flex flex-wrap items-center gap-3 p-3 text-sm">
@@ -80,10 +82,13 @@ function ApiKeysPage() {
                         </label>
                         {k.isRevoked ? (
                           <>
-                            <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">已撤销</span>
+                            <Badge variant="secondary">已撤销</Badge>
                           </>
                         ) : (
-                          <span className="rounded bg-green-500/10 px-2 py-0.5 text-xs text-green-600">启用</span>
+                          <Badge variant="outline">
+                            <CheckIcon data-icon="inline-start" />
+                            已启用
+                          </Badge>
                         )}
                         <Button
                           size="sm"

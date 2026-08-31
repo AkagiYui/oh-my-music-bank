@@ -1,3 +1,4 @@
+import { Badge } from '../components/ui/badge';
 import { Fragment } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Button } from '../components/ui/button';
@@ -7,7 +8,7 @@ export const Route = createFileRoute('/')({
 });
 function Code(props: { children: string }) {
   return (
-    <pre className="overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-xs leading-relaxed">
+    <pre className="overflow-auto rounded-none border bg-muted/40 p-3 font-mono text-xs leading-relaxed">
       <code>{props.children}</code>
     </pre>
   );
@@ -23,7 +24,7 @@ const ENDPOINTS: {
 function Step(props: { n: number; title: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-3">
-      <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+      <div className="flex size-7 shrink-0 items-center justify-center rounded-none bg-primary text-sm font-semibold text-primary-foreground">
         {props.n}
       </div>
       <div className="min-w-0 flex-1 space-y-2">
@@ -60,7 +61,7 @@ function Home() {
             <Step n={2} title="在控制台创建 API Key">
               <p className="text-sm text-muted-foreground">
                 明文只在创建时展示一次，请妥善保存。密钥形如{' '}
-                <code className="rounded bg-muted px-1">omb_xxxxxxxx…</code>
+                <code className="rounded-none bg-muted px-1">omb_xxxxxxxx…</code>
               </p>
             </Step>
             <Step n={3} title="带上 Key 调用开放接口">
@@ -77,18 +78,16 @@ function Home() {
           <CardHeader>
             <CardTitle>鉴权</CardTitle>
             <CardDescription>
-              在请求头携带 <code className="rounded bg-muted px-1">X-API-Key: omb_…</code> 或{' '}
-              <code className="rounded bg-muted px-1">Authorization: Bearer omb_…</code>
+              在请求头携带 <code className="rounded-none bg-muted px-1">X-API-Key: omb_…</code> 或{' '}
+              <code className="rounded-none bg-muted px-1">Authorization: Bearer omb_…</code>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="divide-y rounded-md border">
+            <div className="divide-y rounded-none border">
               {(ENDPOINTS ?? []).map((e, index) => (
                 <Fragment key={index}>
                   <div className="flex flex-wrap items-center gap-3 p-3 text-sm">
-                    <span className="rounded bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">
-                      {e.method}
-                    </span>
+                    <Badge variant="outline">{e.method}</Badge>
                     <code className="font-mono text-xs">{e.path}</code>
                     <span className="ml-auto text-muted-foreground">{e.desc}</span>
                   </div>

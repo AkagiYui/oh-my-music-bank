@@ -97,7 +97,7 @@ function SearchPage() {
 
       {results.length > 0 ? (
         <>
-          <div className="divide-y rounded-md border">
+          <div className="divide-y rounded-none border">
             {(results ?? []).map((t, index) => (
               <Fragment key={index}>
                 <button
@@ -107,10 +107,10 @@ function SearchPage() {
                 >
                   {t.coverUrl ? (
                     <>
-                      <img src={t.coverUrl} alt="" className="size-10 shrink-0 rounded object-cover" />
+                      <img src={t.coverUrl} alt="" className="size-10 shrink-0 rounded-none object-cover" />
                     </>
                   ) : (
-                    <div className="size-10 shrink-0 rounded bg-muted" />
+                    <div className="size-10 shrink-0 rounded-none bg-muted" />
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{t.title}</div>
@@ -131,10 +131,10 @@ function SearchPage() {
             <div className="flex items-center gap-4">
               {selected!.coverUrl ? (
                 <>
-                  <img src={selected!.coverUrl} alt="" className="size-16 rounded object-cover" />
+                  <img src={selected!.coverUrl} alt="" className="size-16 rounded-none object-cover" />
                 </>
               ) : (
-                <div className="size-16 rounded bg-muted" />
+                <div className="size-16 rounded-none bg-muted" />
               )}
               <div>
                 <div className="text-lg font-semibold">{selected!.title}</div>

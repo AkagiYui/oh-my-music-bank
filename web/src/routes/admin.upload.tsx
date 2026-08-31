@@ -44,7 +44,7 @@ function UploadPage() {
   return (
     <div className="max-w-2xl space-y-4">
       <h1 className="text-2xl font-semibold">批量上传音频</h1>
-      <form onSubmit={submit} className="space-y-3 rounded border p-4">
+      <form onSubmit={submit} className="space-y-3 rounded-none border p-4">
         <Input
           ref={input}
           type="file"

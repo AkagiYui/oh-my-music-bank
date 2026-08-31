@@ -1,3 +1,5 @@
+import { Badge } from '../components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { useState, useEffect, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Pagination } from '../components/Pagination';
@@ -67,19 +69,17 @@ function ArtistsPage() {
             </form>
           </div>
 
-          <div className="divide-y rounded-md border">
+          <div className="divide-y rounded-none border">
             {(list() ?? []).length ? (
               (list() ?? []).map((a, index) => (
                 <Fragment key={a.id}>
                   <div>
                     <div className="flex items-center gap-3 p-3 text-sm">
-                      {a.avatarUrl ? (
-                        <>
-                          <img src={a.avatarUrl} alt="" className="size-9 shrink-0 rounded-full object-cover" />
-                        </>
-                      ) : (
-                        <div className="size-9 shrink-0 rounded-full bg-muted" />
-                      )}
+                      {/* Lyra 的官方 Avatar 仍为圆形；用组件保留该设计及加载失败回退。 */}
+                      <Avatar className="size-9">
+                        <AvatarImage src={a.avatarUrl} alt="" />
+                        <AvatarFallback aria-hidden="true">{Array.from(a.name)[0]}</AvatarFallback>
+                      </Avatar>
                       <div className="min-w-0">
                         <div className="truncate font-medium">{a.name}</div>
                         <div className="text-xs text-muted-foreground">{a.trackCount} 首曲目</div>
@@ -169,7 +169,7 @@ function ArtistEditor(props: { id: string; onRenamed: () => void }) {
           {(detail?.aliases ?? []).length ? (
             (detail?.aliases ?? []).map((al, index) => (
               <Fragment key={al.id}>
-                <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
+                <Badge variant="secondary">
                   {al.alias}
                   <button
                     type="button"
@@ -178,7 +178,7 @@ function ArtistEditor(props: { id: string; onRenamed: () => void }) {
                   >
                     ×
                   </button>
-                </span>
+                </Badge>
               </Fragment>
             ))
           ) : (
@@ -202,7 +202,7 @@ function ArtistEditor(props: { id: string; onRenamed: () => void }) {
         关联专辑：
         {(detail?.albums ?? []).map((al) => al.title).join('、') || '无'} · 曲目数 {detail?.trackCount ?? 0}
       </div>
-      <div className="space-y-2 rounded border p-3">
+      <div className="space-y-2 rounded-none border p-3">
         <p className="text-sm">艺术家 ID：{props.id}。合并会转移曲目、专辑、演出和别名。</p>
         <Input
           placeholder="目标艺术家 ID"

@@ -37,7 +37,7 @@ function AdminLayout() {
             <Fragment key={n.to}>
               <Link
                 to={n.to}
-                className="whitespace-nowrap rounded-md px-3 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="whitespace-nowrap rounded-none px-3 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 activeProps={{ className: 'bg-accent font-medium text-foreground' }}
                 activeOptions={{ exact: n.exact ?? false }}
               >

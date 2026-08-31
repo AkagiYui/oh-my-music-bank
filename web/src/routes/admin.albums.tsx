@@ -1,3 +1,4 @@
+import { Badge } from '../components/ui/badge';
 import { useState, useEffect, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Pagination } from '../components/Pagination';
@@ -73,7 +74,7 @@ function AlbumsPage() {
             </form>
           </div>
 
-          <div className="divide-y rounded-md border">
+          <div className="divide-y rounded-none border">
             {(list() ?? []).length ? (
               (list() ?? []).map((a, index) => (
                 <Fragment key={a.id}>
@@ -81,10 +82,10 @@ function AlbumsPage() {
                     <div className="flex items-center gap-3 p-3 text-sm">
                       {a.coverUrl ? (
                         <>
-                          <img src={a.coverUrl} alt="" className="size-9 shrink-0 rounded object-cover" />
+                          <img src={a.coverUrl} alt="" className="size-9 shrink-0 rounded-none object-cover" />
                         </>
                       ) : (
-                        <div className="size-9 shrink-0 rounded bg-muted" />
+                        <div className="size-9 shrink-0 rounded-none bg-muted" />
                       )}
                       <div className="min-w-0">
                         <div className="truncate font-medium">{a.title}</div>
@@ -196,9 +197,9 @@ function AlbumEditor(props: { id: string; onRenamed: () => void }) {
           {(detail?.tracks ?? []).length ? (
             (detail?.tracks ?? []).map((t, index) => (
               <Fragment key={t.id}>
-                <span className="rounded border px-2 py-0.5">
+                <Badge variant="outline">
                   {t.title} · {formatDuration(t.duration)}
-                </span>
+                </Badge>
               </Fragment>
             ))
           ) : (

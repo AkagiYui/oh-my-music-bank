@@ -27,7 +27,7 @@ function UsersPage() {
         <CardContent className="p-4">
           {(users() ?? []).length > 0 ? (
             <>
-              <div className="divide-y rounded-md border">
+              <div className="divide-y rounded-none border">
                 {(users() ?? []).map((u, index) => (
                   <Fragment key={u.id}>
                     <div className="flex flex-wrap items-center gap-3 p-3 text-sm">
@@ -37,7 +37,6 @@ function UsersPage() {
                       </div>
                       <div className="ml-auto flex items-center gap-2">
                         <NativeSelect
-                          className="h-9 rounded-md border border-input bg-background px-2 text-xs"
                           value={u.role}
                           onChange={(e) => api.admin.users.setRole(u.id, e.currentTarget.value).then(() => refetch())}
                         >

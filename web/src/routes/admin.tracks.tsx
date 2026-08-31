@@ -1,6 +1,8 @@
+import { Badge } from '../components/ui/badge';
 import { Checkbox } from '../components/ui/checkbox';
 import { useState, useEffect, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { CheckIcon } from 'lucide-react';
 import { TrackFilters } from '../components/TrackFilters';
 import { Pagination } from '../components/Pagination';
 import { createFileRoute } from '@tanstack/react-router';
@@ -66,7 +68,7 @@ function TracksPage() {
             </Button>
           </form>
 
-          <div className="divide-y rounded-md border">
+          <div className="divide-y rounded-none border">
             {(list() ?? []).length ? (
               (list() ?? []).map((t, index) => (
                 <Fragment key={t.id}>
@@ -74,10 +76,10 @@ function TracksPage() {
                     <div className="flex items-center gap-3 p-3 text-sm">
                       {t.coverUrl ? (
                         <>
-                          <img src={t.coverUrl} alt="" className="size-10 shrink-0 rounded object-cover" />
+                          <img src={t.coverUrl} alt="" className="size-10 shrink-0 rounded-none object-cover" />
                         </>
                       ) : (
-                        <div className="size-10 shrink-0 rounded bg-muted" />
+                        <div className="size-10 shrink-0 rounded-none bg-muted" />
                       )}
                       <div className="min-w-0">
                         <div className="truncate font-medium">{t.title}</div>
@@ -88,10 +90,13 @@ function TracksPage() {
                       <div className="ml-auto flex items-center gap-2">
                         {t.available ? (
                           <>
-                            <span className="rounded bg-green-500/10 px-2 py-0.5 text-xs text-green-600">可搜索</span>
+                            <Badge variant="outline">
+                              <CheckIcon data-icon="inline-start" />
+                              可搜索
+                            </Badge>
                           </>
                         ) : (
-                          <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">已下架</span>
+                          <Badge variant="secondary">已下架</Badge>
                         )}
                         <Button size="sm" variant="ghost" onClick={() => setEditing(editing === t.id ? null : t.id)}>
                           {editing === t.id ? '收起' : '编辑'}
@@ -242,7 +247,7 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
   return (
     <div className="space-y-5">
       {/* 匹配元信息（网易云） */}
-      <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3">
+      <div className="space-y-2 rounded-none border border-primary/30 bg-primary/5 p-3">
         <div className="text-sm font-medium">匹配元信息（仅覆盖选中字段）</div>
         <div className="flex flex-wrap gap-2 text-xs">
           {[
@@ -285,7 +290,7 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
         </div>
         {metaResults.length > 0 ? (
           <>
-            <div className="max-h-56 divide-y overflow-auto rounded-md border bg-background">
+            <div className="max-h-56 divide-y overflow-auto rounded-none border bg-background">
               {(metaResults ?? []).map((m, index) => (
                 <Fragment key={m.id}>
                   <div className="flex items-center gap-2 p-2 text-sm">
@@ -294,12 +299,12 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
                         <img
                           src={m.coverUrl}
                           alt=""
-                          className="size-9 shrink-0 rounded object-cover"
+                          className="size-9 shrink-0 rounded-none object-cover"
                           referrerPolicy="no-referrer"
                         />
                       </>
                     ) : (
-                      <div className="size-9 shrink-0 rounded bg-muted" />
+                      <div className="size-9 shrink-0 rounded-none bg-muted" />
                     )}
                     <div className="min-w-0">
                       <div className="truncate font-medium">{m.title}</div>
@@ -360,7 +365,7 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
           {(detail?.aliasRows ?? []).length ? (
             (detail?.aliasRows ?? []).map((al, index) => (
               <Fragment key={al.id}>
-                <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
+                <Badge variant="secondary">
                   {al.alias}
                   <button
                     type="button"
@@ -369,7 +374,7 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
                   >
                     ×
                   </button>
-                </span>
+                </Badge>
               </Fragment>
             ))
           ) : (
@@ -437,13 +442,11 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
                 loudness: au.loudness,
               }))}
             />
-            <div className="divide-y rounded-md border text-xs">
+            <div className="divide-y rounded-none border text-xs">
               {(detail?.audios ?? []).map((au, index) => (
                 <Fragment key={au.id}>
                   <div className="flex flex-wrap items-center gap-2 p-2">
-                    <span className="rounded bg-primary/10 px-2 py-0.5 font-medium text-primary">
-                      {au.qualityLabel}
-                    </span>
+                    <Badge variant="outline">{au.qualityLabel}</Badge>
                     <span className="text-muted-foreground">
                       {au.source ? `${au.source} · ` : ''}
                       {au.format} · {Math.round(au.bitrate / 1000)} kbps · {au.samplingRate} Hz ·{' '}
@@ -469,8 +472,8 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
         {(detail?.origins ?? []).length ? (
           (detail?.origins ?? []).map((o, index) => (
             <Fragment key={o.id}>
-              <div className="flex flex-wrap items-center gap-2 rounded-md border p-2 text-xs">
-                <span className="rounded bg-muted px-2 py-0.5">{o.status}</span>
+              <div className="flex flex-wrap items-center gap-2 rounded-none border p-2 text-xs">
+                <Badge variant="secondary">{o.status}</Badge>
                 <span className="text-muted-foreground">
                   {o.format} · {Math.round(o.bitrate / 1000)} kbps · {(o.size / 1048576).toFixed(1)} MB
                 </span>
@@ -482,7 +485,7 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
           <p className="text-xs text-muted-foreground">无</p>
         )}
       </div>
-      <div className="space-y-2 rounded border p-3">
+      <div className="space-y-2 rounded-none border p-3">
         <p className="text-sm">合并至已有曲目：保留目标基础信息，转移全部音频、关联和别名，然后删除当前曲目。</p>
         <Input placeholder="目标曲目 ID" value={mergeTarget} onChange={(e) => setMergeTarget(e.currentTarget.value)} />
         <Button

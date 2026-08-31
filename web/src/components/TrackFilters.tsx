@@ -18,7 +18,6 @@ export function TrackFilters(props: {
         onChange={(e) => set('language', e.currentTarget.value)}
       />
       <NativeSelect
-        className="h-9 rounded border bg-background px-2 text-sm"
         aria-label="音质筛选"
         value={props.value.quality ?? ''}
         onChange={(e) => set('quality', e.currentTarget.value)}

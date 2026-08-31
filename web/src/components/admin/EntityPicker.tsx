@@ -1,3 +1,4 @@
+import { Badge } from '../ui/badge';
 import { useState, Fragment } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -41,7 +42,7 @@ export function EntityPicker(props: {
         {(props.selected ?? []).length ? (
           (props.selected ?? []).map((e, index) => (
             <Fragment key={e.id}>
-              <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs">
+              <Badge variant="secondary">
                 {e.name}
                 <button
                   type="button"
@@ -50,7 +51,7 @@ export function EntityPicker(props: {
                 >
                   ×
                 </button>
-              </span>
+              </Badge>
             </Fragment>
           ))
         ) : (
@@ -83,7 +84,7 @@ export function EntityPicker(props: {
       </div>
       {results.length > 0 ? (
         <>
-          <div className="max-h-40 divide-y overflow-auto rounded-md border">
+          <div className="max-h-40 divide-y overflow-auto rounded-none border">
             {(results ?? []).map((e, index) => (
               <Fragment key={e.name}>
                 <button

@@ -155,16 +155,14 @@ function ImportPage() {
                 {(folders ?? []).length ? (
                   (folders ?? []).map((f, index) => (
                     <Fragment key={f.id}>
-                      <button
+                      <Button
                         type="button"
-                        className={
-                          'rounded-full border px-3 py-1 text-sm ' +
-                          (folderId === f.id ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-accent')
-                        }
+                        variant={folderId === f.id ? 'default' : 'outline'}
+                        aria-pressed={folderId === f.id}
                         onClick={() => openFolder(f.id)}
                       >
                         {f.title} ({f.mediaCount})
-                      </button>
+                      </Button>
                     </Fragment>
                   ))
                 ) : (
@@ -251,13 +249,13 @@ function ImportPage() {
                       />
                       <button
                         type="button"
-                        className="flex items-center gap-3 rounded-md border p-2 text-left text-sm hover:bg-accent"
+                        className="flex items-center gap-3 rounded-none border p-2 text-left text-sm hover:bg-accent"
                         onClick={() => openVideo(m.bvid)}
                       >
                         <img
                           src={m.cover}
                           alt=""
-                          className="h-12 w-20 shrink-0 rounded object-cover"
+                          className="h-12 w-20 shrink-0 rounded-none object-cover"
                           referrerPolicy="no-referrer"
                         />
                         <div className="min-w-0">
@@ -282,7 +280,7 @@ function ImportPage() {
                   <img
                     src={video!.cover}
                     alt=""
-                    className="h-14 w-24 rounded object-cover"
+                    className="h-14 w-24 rounded-none object-cover"
                     referrerPolicy="no-referrer"
                   />
                   <div className="min-w-0">
@@ -294,7 +292,7 @@ function ImportPage() {
                 {video!.pages.length > 1 ? (
                   <>
                     <NativeSelect
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      className="w-full"
                       value={cid}
                       onChange={(e) => selectPage(Number(e.currentTarget.value))}
                     >
@@ -344,11 +342,7 @@ function ImportPage() {
                     加入此片段
                   </Button>
                   <span className="mx-1 h-5 w-px bg-border" />
-                  <NativeSelect
-                    className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                    value={provider}
-                    onChange={(e) => setProvider(e.currentTarget.value)}
-                  >
+                  <NativeSelect value={provider} onChange={(e) => setProvider(e.currentTarget.value)}>
                     <option value="xfyun">讯飞</option>
                     <option value="netease" disabled>
                       网易云（暂未支持）
@@ -372,7 +366,7 @@ function ImportPage() {
                       {(cands ?? []).length ? (
                         (cands ?? []).map((c, index) => (
                           <Fragment key={index}>
-                            <div className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                            <div className="flex items-center gap-2 rounded-none border p-2 text-sm">
                               <div className="min-w-0">
                                 <div className="truncate font-medium">{c.title}</div>
                                 <div className="text-xs text-muted-foreground">

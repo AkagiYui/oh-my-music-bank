@@ -37,7 +37,7 @@ function JobsPage() {
       {(jobs?.data ?? []).length ? (
         (jobs?.data ?? []).map((j, index) => (
           <Fragment key={j.id}>
-            <div className="space-y-2 rounded border p-3">
+            <div className="space-y-2 rounded-none border p-3">
               <div className="flex items-center gap-3">
                 <span>{j.kind === 'upload' ? '文件上传' : 'B 站导入'}</span>
                 <Badge variant={j.status === 'failed' ? 'destructive' : 'secondary'}>

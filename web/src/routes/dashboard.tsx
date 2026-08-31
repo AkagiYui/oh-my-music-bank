@@ -1,6 +1,8 @@
+import { Badge } from '../components/ui/badge';
 import { clearFeedback, notifyError } from '../lib/feedback';
 import { useEffect, useState, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { CheckIcon } from 'lucide-react';
 import { Pagination } from '../components/Pagination';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { api } from '../lib/api';
@@ -72,10 +74,12 @@ function Dashboard() {
           </form>
           {created ? (
             <>
-              <div className="space-y-2 rounded-md border border-primary/40 bg-primary/5 p-3">
+              <div className="space-y-2 rounded-none border border-primary/40 bg-primary/5 p-3">
                 <div className="text-sm font-medium">已创建，请立即复制（仅此一次可见）：</div>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 overflow-auto rounded bg-muted px-2 py-1 font-mono text-xs">{created}</code>
+                  <code className="flex-1 overflow-auto rounded-none bg-muted px-2 py-1 font-mono text-xs">
+                    {created}
+                  </code>
                   <Button size="sm" variant="outline" onClick={() => navigator.clipboard?.writeText(created ?? '')}>
                     复制
                   </Button>
@@ -96,7 +100,7 @@ function Dashboard() {
         <CardContent>
           {(keys() ?? []).length > 0 ? (
             <>
-              <div className="divide-y rounded-md border">
+              <div className="divide-y rounded-none border">
                 {(keys() ?? []).map((k, index) => (
                   <Fragment key={k.id}>
                     <div className="flex flex-wrap items-center gap-3 p-3 text-sm">
@@ -107,10 +111,14 @@ function Dashboard() {
                       <div className="ml-auto flex items-center gap-2">
                         {k.isRevoked ? (
                           <>
-                            <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">已撤销</span>
+                            <Badge variant="secondary">已撤销</Badge>
                           </>
                         ) : (
-                          <span className="rounded bg-green-500/10 px-2 py-0.5 text-xs text-green-600">启用</span>
+                          // 状态使用描边和完成态文案，避免与主色操作按钮混淆。
+                          <Badge variant="outline">
+                            <CheckIcon data-icon="inline-start" />
+                            已启用
+                          </Badge>
                         )}
                         {!k.isRevoked ? (
                           <>

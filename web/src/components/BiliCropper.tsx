@@ -81,7 +81,7 @@ function CropperSession(props: CropperProps) {
       />
       <div
         ref={barRef}
-        className="relative h-10 cursor-pointer touch-none select-none rounded-md border bg-muted"
+        className="relative h-10 cursor-pointer touch-none select-none rounded-none border bg-muted"
         onPointerDown={(e) => {
           if (drag.current) return;
           const time = timeAt(e.clientX);
@@ -97,7 +97,7 @@ function CropperSession(props: CropperProps) {
         {(['start', 'end'] as const).map((which) => (
           <div
             key={which}
-            className="absolute inset-y-0 w-2 -translate-x-1/2 cursor-ew-resize rounded bg-primary"
+            className="absolute inset-y-0 w-2 -translate-x-1/2 cursor-ew-resize rounded-none bg-primary"
             style={{ left: pct(props[which]) }}
             role="slider"
             tabIndex={0}
