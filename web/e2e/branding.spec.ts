@@ -94,6 +94,7 @@ test('独立域名用于真实搜索、详情及签名媒体地址，管理请�
   await page.getByPlaceholder('输入歌名 / 别名，如 告白气球').fill('测试');
   await page.getByRole('button', { name: '搜索', exact: true }).click();
   await page.getByRole('button', { name: /测试曲目.*测试艺术家/ }).click();
+  await page.getByRole('button', { name: '播放 测试曲目', exact: true }).click();
   await expect(page.locator('audio')).toHaveAttribute('src', 'https://api.example.test/test-audio.wav');
   expect(destinations).toHaveLength(2);
   await page.goto('/admin/settings');

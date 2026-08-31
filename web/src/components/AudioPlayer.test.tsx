@@ -1,29 +1,51 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test';
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { render, fireEvent, waitFor, act } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { AudioPlayer } from './AudioPlayer';
 import { Feedback } from './Feedback';
+import { BiliCropper } from './BiliCropper';
+import { GlobalPlayerProvider, useGlobalPlayer } from './GlobalPlayer';
+
+const sources = [
+  { id: 'a', url: '/a.wav', label: '标准' },
+  { id: 'b', url: '/b.wav', label: '无损', loudness: -8 },
+];
+function metadata(audio: HTMLAudioElement, duration = 100) {
+  Object.defineProperty(audio, 'duration', { value: duration, configurable: true });
+  fireEvent.loadedMetadata(audio);
+}
+function setupMedia() {
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (this: HTMLMediaElement) {
+    Object.defineProperty(this, 'paused', { value: true, configurable: true });
+    this.dispatchEvent(new Event('pause'));
+  });
+  return vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+    Object.defineProperty(this, 'paused', { value: false, configurable: true });
+    this.dispatchEvent(new Event('play'));
+    this.dispatchEvent(new Event('playing'));
+    return Promise.resolve();
+  });
+}
 
 describe('AudioPlayer', () => {
   beforeEach(() => {
-    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
-    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    setupMedia();
   });
-  it('切换曲目时重置地址和进度，忽略旧媒体事件', async () => {
+  it('切换曲目重置进度并忽略旧媒体事件', () => {
     const screen = render(
       <StrictMode>
-        <AudioPlayer sources={[{ id: 'a', url: '/a.wav', label: 'A' }]} />
+        <AudioPlayer sources={[sources[0]]} />
       </StrictMode>,
     );
     const oldAudio = screen.container.querySelector('audio')!;
-    Object.defineProperty(oldAudio, 'duration', { value: 100 });
-    fireEvent.loadedMetadata(oldAudio);
+    metadata(oldAudio);
     oldAudio.currentTime = 30;
     fireEvent.timeUpdate(oldAudio);
     expect(screen.getByLabelText('播放进度').getAttribute('value')).toBe('30');
     screen.rerender(
       <StrictMode>
-        <AudioPlayer sources={[{ id: 'b', url: '/b.wav', label: 'B' }]} />
+        <AudioPlayer sources={[sources[1]]} />
       </StrictMode>,
     );
     const audio = screen.container.querySelector('audio')!;
@@ -32,36 +54,28 @@ describe('AudioPlayer', () => {
     fireEvent.timeUpdate(oldAudio);
     expect(screen.getByLabelText('播放进度').getAttribute('value')).toBe('0');
   });
-  it('切换音质保留进度和播放状态，并应用响度衰减', async () => {
-    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
-    const screen = render(
-      <AudioPlayer
-        sources={[
-          { id: 'a', url: '/a.wav', label: '标准' },
-          { id: 'b', url: '/b.wav', label: '无损', loudness: -8 },
-        ]}
-      />,
-    );
-    const audio = screen.container.querySelector('audio')!;
-    Object.defineProperty(audio, 'duration', { value: 100 });
-    Object.defineProperty(audio, 'paused', { value: false });
-    fireEvent.loadedMetadata(audio);
+  it('切换音质保留进度和播放状态，并应用响度衰减', () => {
+    const screen = render(<AudioPlayer sources={sources} />);
+    let audio = screen.container.querySelector('audio')!;
+    metadata(audio);
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
     audio.currentTime = 37;
-    fireEvent.click(screen.getByText('无损'));
+    fireEvent.change(screen.getByLabelText('音质'), { target: { value: '1' } });
+    audio = screen.container.querySelector('audio')!;
     expect(audio.getAttribute('src')).toBe('/b.wav');
-    fireEvent.loadedMetadata(audio);
+    metadata(audio);
     expect(audio.currentTime).toBe(37);
-    expect(play).toHaveBeenCalled();
+    expect(audio.paused).toBe(false);
     expect(audio.volume).toBeCloseTo(10 ** (-6 / 20));
     fireEvent.click(screen.getByLabelText('静音'));
-    expect(audio.volume).toBe(0);
+    expect(audio.muted).toBe(true);
   });
-  it('播放错误和被拒绝的 play 请求显示反馈', async () => {
+  it('播放错误和被拒绝的请求显示反馈', async () => {
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockRejectedValue(new Error('blocked'));
     const screen = render(
       <>
         <Feedback />
-        <AudioPlayer sources={[{ id: 'a', url: '/a.wav', label: 'A' }]} />
+        <AudioPlayer sources={[sources[0]]} />
       </>,
     );
     fireEvent.click(screen.getByRole('button', { name: '播放' }));
@@ -69,4 +83,111 @@ describe('AudioPlayer', () => {
     fireEvent.error(screen.container.querySelector('audio')!);
     await waitFor(() => expect(screen.getByText('操作失败').parentElement!.textContent).toContain('音频加载失败'));
   });
+  it('音质载入中启动裁剪，不会被晚到的元数据恢复全局播放；反向也互斥', () => {
+    const screen = render(
+      <>
+        <AudioPlayer sources={sources} />
+        <BiliCropper src="/crop.wav" duration={100} start={10} end={20} onChange={() => {}} />
+      </>,
+    );
+    let audio = screen.container.querySelector('audio')!;
+    metadata(audio);
+    fireEvent.click(screen.getAllByRole('button', { name: '播放' })[0]);
+    audio.currentTime = 37;
+    fireEvent.change(screen.getByLabelText('音质'), { target: { value: '1' } });
+    fireEvent.click(screen.getByText('试听片段'));
+    audio = screen.container.querySelector('audio')!;
+    metadata(audio);
+    expect(audio.currentTime).toBe(37);
+    expect(audio.paused).toBe(true);
+    const crop = screen.container.querySelectorAll('audio')[1];
+    expect(crop.paused).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    expect(audio.paused).toBe(false);
+    expect(crop.paused).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    expect(audio.paused).toBe(true);
+    expect(crop.paused).toBe(false);
+  });
+  it('暂停后被取消的播放 Promise 不弹出错误，也不响应迟到的 play 事件', async () => {
+    let reject!: (error: Error) => void;
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(
+      () =>
+        new Promise((_, no) => {
+          reject = no;
+        }),
+    );
+    const screen = render(
+      <>
+        <Feedback />
+        <AudioPlayer sources={sources} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '播放' }));
+    fireEvent.click(screen.getByRole('button', { name: '暂停' }));
+    await act(async () => reject(new Error('cancelled')));
+    const audio = screen.container.querySelector('audio')!;
+    fireEvent.play(audio);
+    expect(audio.paused).toBe(true);
+    expect(screen.queryByText('操作失败')).toBeNull();
+  });
+});
+
+function PlaybackEntry({ id }: { id: string }) {
+  const player = useGlobalPlayer();
+  return (
+    <button
+      onClick={() =>
+        player.start({ id, title: id, artist: '艺术家', sources: [{ id, url: `/${id}.wav`, label: '标准' }] })
+      }
+    >
+      {id}
+    </button>
+  );
+}
+
+it('所有入口共享播放器：页面卸载不断播，同曲目不重置，换曲/关闭释放旧音频并保留音量设置', () => {
+  setupMedia();
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const screen = render(
+    <GlobalPlayerProvider>
+      <PlaybackEntry id="A" />
+      <PlaybackEntry id="B" />
+    </GlobalPlayerProvider>,
+  );
+  expect(screen.container.querySelectorAll('audio')).toHaveLength(0);
+  fireEvent.click(screen.getByText('A'));
+  const audio = screen.container.querySelector('audio')!;
+  metadata(audio);
+  audio.currentTime = 25;
+  fireEvent.timeUpdate(audio);
+  fireEvent.click(screen.getByLabelText('静音'));
+  fireEvent.click(screen.getByRole('button', { name: 'A' }));
+  expect(audio.paused).toBe(true);
+  expect(audio.currentTime).toBe(25);
+  fireEvent.click(screen.getByRole('button', { name: 'A' }));
+  expect(audio.paused).toBe(false);
+  screen.rerender(
+    <GlobalPlayerProvider>
+      <PlaybackEntry id="B" />
+    </GlobalPlayerProvider>,
+  );
+  expect(screen.container.querySelector('audio')).toBe(audio);
+  expect(audio.currentTime).toBe(25);
+  expect(audio.paused).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: 'B' }));
+  expect(screen.container.querySelectorAll('audio')).toHaveLength(1);
+  expect(audio.paused).toBe(true);
+  const next = screen.container.querySelector('audio')!;
+  expect(next.getAttribute('src')).toBe('/B.wav');
+  expect(next.muted).toBe(true);
+  fireEvent.click(screen.getByLabelText('关闭播放器'));
+  expect(next.paused).toBe(true);
+  expect(screen.queryByRole('region', { name: '全局播放器' })).toBeNull();
 });

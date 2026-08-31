@@ -163,5 +163,7 @@
   }
   html {
     @apply font-sans;
+    /* 键盘聚焦与锚点滚动时，为固定的全局播放器预留可见区域。 */
+    scroll-padding-bottom: var(--global-player-height, 0px);
   }
 }

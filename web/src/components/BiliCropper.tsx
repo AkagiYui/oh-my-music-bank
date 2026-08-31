@@ -1,4 +1,5 @@
 import { notifyError } from '../lib/feedback';
+import { requestAudioFocus, subscribeAudioFocus } from '../lib/audio-focus';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { formatDuration } from '../lib/utils';
@@ -18,6 +19,8 @@ function CropperSession(props: CropperProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const segmentPreview = useRef(false);
+  const wantsPlay = useRef(false);
+  const playAttempt = useRef(0);
   const drag = useRef<'start' | 'end' | null>(null);
   const [cur, setCur] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -27,15 +30,37 @@ function CropperSession(props: CropperProps) {
   const pct = (v: number) => `${clamp(v / dur, 0, 1) * 100}%`;
   useEffect(() => {
     const audio = audioRef.current!;
+    const unsubscribe = subscribeAudioFocus((owner) => {
+      if (owner !== audio) {
+        wantsPlay.current = false;
+        ++playAttempt.current;
+        audio.pause();
+        setPlaying(false);
+      }
+    });
+    const invalidate = () => {
+      ++playAttempt.current;
+    };
     return () => {
+      unsubscribe();
+      wantsPlay.current = false;
+      invalidate();
       audio.pause();
     };
   }, []);
   function play() {
     const audio = audioRef.current!;
+    // 点击播放或试听片段立即暂停全局播放器，同时取消其等待元数据后的自动续播。
+    wantsPlay.current = true;
+    const attempt = ++playAttempt.current;
+    requestAudioFocus(audio);
     void audio.play().catch(() => {
       // 换源或关闭裁剪器后，旧播放请求不再向全局浮层发送错误。
-      if (audioRef.current === audio) notifyError('试听失败，请刷新视频或检查网络');
+      if (audioRef.current === audio && attempt === playAttempt.current && wantsPlay.current) {
+        wantsPlay.current = false;
+        setPlaying(false);
+        notifyError('试听失败，请刷新视频或检查网络');
+      }
     });
   }
   function timeAt(clientX: number) {
@@ -68,6 +93,8 @@ function CropperSession(props: CropperProps) {
         onTimeUpdate={(e) => {
           setCur(e.currentTarget.currentTime);
           if (segmentPreview.current && e.currentTarget.currentTime >= props.end) {
+            wantsPlay.current = false;
+            ++playAttempt.current;
             e.currentTarget.pause();
             segmentPreview.current = false;
           }
@@ -75,7 +102,17 @@ function CropperSession(props: CropperProps) {
         onLoadedMetadata={(e) => {
           if (Number.isFinite(e.currentTarget.duration)) setMetaDur(e.currentTarget.duration);
         }}
-        onPlay={() => setPlaying(true)}
+        onPlay={(e) => {
+          if (!wantsPlay.current) {
+            e.currentTarget.pause();
+            return;
+          }
+          setPlaying(true);
+        }}
+        onEnded={() => {
+          wantsPlay.current = false;
+          setPlaying(false);
+        }}
         onPause={() => setPlaying(false)}
         onError={() => notifyError('音频加载失败，请刷新视频后重试')}
       />
@@ -125,8 +162,13 @@ function CropperSession(props: CropperProps) {
           variant="secondary"
           onClick={() => {
             segmentPreview.current = false;
-            if (audioRef.current!.paused) play();
-            else audioRef.current!.pause();
+            if (!wantsPlay.current && audioRef.current!.paused) play();
+            else {
+              wantsPlay.current = false;
+              ++playAttempt.current;
+              audioRef.current!.pause();
+              setPlaying(false);
+            }
           }}
         >
           {playing ? '暂停' : '播放'}

@@ -96,6 +96,7 @@ test('搜索和音频错误不推移控件，搜索失败保留已有结果及�
   await page.getByPlaceholder('输入歌名 / 别名，如 告白气球').fill('测试');
   await submit.click();
   await page.getByRole('button', { name: /测试曲目.*测试艺术家/ }).click();
+  await page.getByRole('button', { name: '播放 测试曲目', exact: true }).click();
   const audio = page.locator('audio');
   await expect(audio).toHaveAttribute('src', 'http://127.0.0.1:5175/test-audio.wav');
   await expect.poll(() => audio.evaluate((element: HTMLAudioElement) => element.readyState)).toBeGreaterThan(0);

@@ -335,10 +335,11 @@ function ImportWorkspace({ accountId, configured }: { accountId: string; configu
                   查看任务
                 </Link>
               </div>
+              {/* 网格项和卡片都允许收缩，长标题不撑宽列；卡片填满余宽并与复选框居中对齐。 */}
               <div className="grid gap-2 sm:grid-cols-2">
                 {(items ?? []).map((m, index) => (
                   <Fragment key={m.bvid}>
-                    <div className="flex gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <Checkbox
                         aria-label={`选择 ${m.title}`}
                         checked={selected.includes(m.bvid)}
@@ -348,7 +349,7 @@ function ImportWorkspace({ accountId, configured }: { accountId: string; configu
                       />
                       <button
                         type="button"
-                        className="flex items-center gap-3 rounded-none border p-2 text-left text-sm hover:bg-accent"
+                        className="flex min-w-0 flex-1 items-center gap-3 rounded-none border p-2 text-left text-sm hover:bg-accent"
                         onClick={() => openVideo(m.bvid)}
                       >
                         <img
@@ -357,10 +358,15 @@ function ImportWorkspace({ accountId, configured }: { accountId: string; configu
                           className="h-12 w-20 shrink-0 rounded-none object-cover"
                           referrerPolicy="no-referrer"
                         />
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{m.title}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {m.upName} · {formatDuration(m.duration)}
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium" title={m.title}>
+                            {m.title}
+                          </div>
+                          <div className="flex gap-1 text-xs text-muted-foreground">
+                            <span className="truncate" title={m.upName}>
+                              {m.upName}
+                            </span>
+                            <span className="shrink-0">· {formatDuration(m.duration)}</span>
                           </div>
                         </div>
                       </button>

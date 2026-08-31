@@ -13,7 +13,7 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Card, CardContent } from '../components/ui/card';
 import { EntityPicker, type Entity } from '../components/admin/EntityPicker';
-import { AudioPlayer } from '../components/AudioPlayer';
+import { TrackPlayButton } from '../components/GlobalPlayer';
 import { formatDuration } from '../lib/utils';
 export const Route = createFileRoute('/music/tracks')({
   component: TracksPage,
@@ -443,14 +443,7 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
         <div className="text-sm font-medium">分发音频 · 曲目 ID：{props.id}</div>
         {(detail?.audios ?? []).length > 0 ? (
           <>
-            <AudioPlayer
-              sources={(detail?.audios ?? []).map((au) => ({
-                id: au.id,
-                label: `${au.qualityLabel} · ${Math.round(au.bitrate / 1000)}kbps`,
-                url: au.url,
-                loudness: au.loudness,
-              }))}
-            />
+            <TrackPlayButton track={detail!} />
             <div className="divide-y rounded-none border text-xs">
               {(detail?.audios ?? []).map((au, index) => (
                 <Fragment key={au.id}>

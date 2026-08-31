@@ -19,8 +19,8 @@ export function Feedback() {
       closeButton
       richColors
       containerAriaLabel="通知"
-      offset={24}
-      mobileOffset={16}
+      offset={{ bottom: 'calc(var(--global-player-height, 0px) + 24px)', right: 24, left: 24 }}
+      mobileOffset={{ bottom: 'calc(var(--global-player-height, 0px) + 16px)', right: 16, left: 16 }}
       toastOptions={{
         closeButtonAriaLabel: '关闭错误提示',
         classNames: { toast: 'items-start!', content: 'min-w-0 flex-1' },

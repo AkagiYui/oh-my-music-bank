@@ -2,6 +2,7 @@ import { Outlet, createRootRoute, useRouter } from '@tanstack/react-router';
 import { Feedback } from '../components/Feedback';
 import { SiteProvider, SiteMetadata, SiteFooter } from '../components/SiteBranding';
 import { SiteHeader } from '../components/SiteHeader';
+import { GlobalPlayerProvider, PlayerSessionBoundary } from '../components/GlobalPlayer';
 import { Button } from '../components/ui/button';
 
 function RouteError({ error, reset }: { error: Error; reset: () => void }) {
@@ -23,15 +24,18 @@ function RouteError({ error, reset }: { error: Error; reset: () => void }) {
 export const Route = createRootRoute({
   component: () => (
     <SiteProvider>
-      <div className="flex min-h-screen flex-col">
-        <SiteMetadata />
-        <SiteHeader />
-        <Feedback />
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
-          <Outlet />
-        </main>
-        <SiteFooter />
-      </div>
+      <GlobalPlayerProvider>
+        <PlayerSessionBoundary />
+        <div className="flex min-h-screen flex-col">
+          <SiteMetadata />
+          <SiteHeader />
+          <Feedback />
+          <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
+            <Outlet />
+          </main>
+          <SiteFooter />
+        </div>
+      </GlobalPlayerProvider>
     </SiteProvider>
   ),
   errorComponent: RouteError,

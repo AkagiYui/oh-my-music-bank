@@ -10,7 +10,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent } from '../components/ui/card';
-import { AudioPlayer } from '../components/AudioPlayer';
+import { TrackPlayButton } from '../components/GlobalPlayer';
 import { formatDuration } from '../lib/utils';
 export const Route = createFileRoute('/search')({
   component: SearchPage,
@@ -19,7 +19,7 @@ const KEY_STORAGE = 'ommb.tryKey';
 function SearchPage() {
   const site = useSiteConfig();
   const apiOrigin = resolveAPIOrigin(site.apiOrigin);
-  // API 来源变化时清空旧结果与播放器，避免把不同部署的数据混在同一轮搜索中。
+  // API 来源变化时清空旧搜索结果，避免把不同部署的数据混在同一轮搜索中。
   return <SearchContent key={apiOrigin} apiOrigin={apiOrigin} />;
 }
 function SearchContent({ apiOrigin }: { apiOrigin: string }) {
@@ -158,14 +158,7 @@ function SearchContent({ apiOrigin }: { apiOrigin: string }) {
 
             {(selected!.audios ?? []).length > 0 ? (
               <>
-                <AudioPlayer
-                  sources={(selected!.audios ?? []).map((au) => ({
-                    id: au.id,
-                    label: `${au.qualityLabel} · ${Math.round(au.bitrate / 1000)}kbps`,
-                    url: au.url,
-                    loudness: au.loudness,
-                  }))}
-                />
+                <TrackPlayButton track={selected} origin={apiOrigin} />
               </>
             ) : (
               <p className="text-sm text-muted-foreground">暂无可播放音频。</p>
