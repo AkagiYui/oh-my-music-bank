@@ -10,6 +10,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent } from '../components/ui/card';
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '../components/ui/empty';
 import { TrackPlayButton } from '../components/GlobalPlayer';
 import { formatDuration } from '../lib/utils';
 export const Route = createFileRoute('/search')({
@@ -30,7 +31,8 @@ function SearchContent({ apiOrigin }: { apiOrigin: string }) {
   const [total, setTotal] = useState(0);
   const searchRequest = useRef(0);
   const detailRequest = useRef(0);
-  const [results, setResults] = useState<TrackDTO[]>([]);
+  // null 表示尚未搜索成功，空数组表示搜索成功但没有匹配曲目。
+  const [results, setResults] = useState<TrackDTO[] | null>(null);
   const [selected, setSelected] = useState<TrackDTO | null>(null);
   const [loading, setLoading] = useState(false);
   async function doSearch(e?: React.FormEvent, nextPage = 1) {
@@ -53,7 +55,6 @@ function SearchContent({ apiOrigin }: { apiOrigin: string }) {
       setTotal(res.total);
       setResults(res.data);
       setSelected(null);
-      if (res.data.length === 0) notifyError('没有找到相关曲目');
     } catch (err) {
       if (token !== searchRequest.current) return;
       notifyError(err instanceof ApiError ? `${err.status} ${err.message}` : String(err));
@@ -104,10 +105,18 @@ function SearchContent({ apiOrigin }: { apiOrigin: string }) {
         </CardContent>
       </Card>
 
-      {results.length > 0 ? (
+      {results !== null ? (
         <>
           <div className="divide-y rounded-none border">
-            {(results ?? []).map((t, index) => (
+            {results.length === 0 ? (
+              <Empty role="status">
+                <EmptyHeader>
+                  <EmptyTitle>没有找到相关曲目</EmptyTitle>
+                  <EmptyDescription>试试其他关键词，或调整筛选条件。</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : null}
+            {results.map((t, index) => (
               <Fragment key={index}>
                 <button
                   type="button"
