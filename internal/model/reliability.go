@@ -14,9 +14,11 @@ type AuthSession struct {
 func (AuthSession) TableName() string { return "auth_session" }
 
 type ObjectGC struct {
-	FileKey   string `gorm:"primaryKey"`
-	NotBefore time.Time
-	Attempts  int
+	BucketKind string `gorm:"primaryKey;column:bucket_kind"`
+	FileKey    string `gorm:"primaryKey"`
+	NotBefore  time.Time
+	Attempts   int
+	LeaseUntil *time.Time
 }
 
 func (ObjectGC) TableName() string { return "object_gc" }

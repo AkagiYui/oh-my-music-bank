@@ -1,4 +1,4 @@
-// Package objectstore 封装 S3 兼容对象存储（上传/下载/删除/预签名）。
+// Package objectstore 封装公共资源桶与私有媒体桶。
 package objectstore
 
 import (
@@ -16,10 +16,20 @@ import (
 
 // Store 对象存储客户端。
 type Store struct {
-	client *minio.Client
-	bucket string
-	cfg    config.Storage
+	client      *minio.Client
+	public      string
+	private     string
+	presignTTL  time.Duration
+	publicURLFn func(string) string
 }
+
+// BucketKind 是持久化到清理队列的逻辑桶标识，不暴露部署使用的真实桶名。
+type BucketKind string
+
+const (
+	BucketPublic  BucketKind = "public"
+	BucketPrivate BucketKind = "private"
+)
 
 // New 根据配置创建对象存储客户端。endpoint 可带或不带 http(s):// 前缀。
 func New(cfg config.Storage) (*Store, error) {
@@ -41,39 +51,61 @@ func New(cfg config.Storage) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Store{client: client, bucket: cfg.Bucket, cfg: cfg}, nil
+	ttl, err := cfg.PresignedURLDuration()
+	if err != nil {
+		return nil, err
+	}
+	return &Store{
+		client: client, public: cfg.PublicBucket, private: cfg.PrivateBucket, presignTTL: ttl,
+		publicURLFn: cfg.PublicURL,
+	}, nil
+}
+
+func (s *Store) bucket(kind BucketKind) string {
+	if kind == BucketPublic {
+		return s.public
+	}
+	return s.private
 }
 
 // Put 上传对象。
-func (s *Store) Put(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
-	_, err := s.client.PutObject(ctx, s.bucket, key, r, size, minio.PutObjectOptions{ContentType: contentType})
+func (s *Store) Put(ctx context.Context, bucket BucketKind, key string, r io.Reader, size int64, contentType string) error {
+	_, err := s.client.PutObject(ctx, s.bucket(bucket), key, r, size, minio.PutObjectOptions{ContentType: contentType})
 	return err
 }
 
 // Get 下载对象，调用方负责关闭。
-func (s *Store) Get(ctx context.Context, key string) (io.ReadCloser, error) {
-	return s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+func (s *Store) Get(ctx context.Context, bucket BucketKind, key string) (io.ReadCloser, error) {
+	return s.client.GetObject(ctx, s.bucket(bucket), key, minio.GetObjectOptions{})
 }
 
 // Remove 删除对象。
-func (s *Store) Remove(ctx context.Context, key string) error {
-	return s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
+func (s *Store) Remove(ctx context.Context, bucket BucketKind, key string) error {
+	return s.client.RemoveObject(ctx, s.bucket(bucket), key, minio.RemoveObjectOptions{})
 }
 
-// PublicURL 返回对象的对外访问地址（基于配置的 FilePrefix，适用于公有读桶）。
+// PublicURL 返回公共桶对象的对外访问地址。
 func (s *Store) PublicURL(key string) string {
-	return s.cfg.PublicURL(key)
+	return s.publicURLFn(key)
 }
 
-// PresignedGet 生成限时下载链接（适用于私有桶）。
-func (s *Store) PresignedGet(ctx context.Context, key string, expiry time.Duration) (string, error) {
-	u, err := s.client.PresignedGetObject(ctx, s.bucket, key, expiry, nil)
+// PresignedPrivateGet 为私有媒体生成限时直连，并返回明确的过期时间。
+func (s *Store) PresignedPrivateGet(ctx context.Context, key string) (string, time.Time, error) {
+	return s.presignedPrivateGet(ctx, key, nil)
+}
+
+// PresignedPrivateDownload 为私有媒体生成带下载响应头的限时直连。
+func (s *Store) PresignedPrivateDownload(ctx context.Context, key, filename string) (string, time.Time, error) {
+	params := make(url.Values)
+	params.Set("response-content-disposition", `attachment; filename="`+filename+`"`)
+	return s.presignedPrivateGet(ctx, key, params)
+}
+
+func (s *Store) presignedPrivateGet(ctx context.Context, key string, params url.Values) (string, time.Time, error) {
+	now := time.Now()
+	u, err := s.client.PresignedGetObject(ctx, s.private, key, s.presignTTL, params)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
-	return u.String(), nil
-}
-
-func (s *Store) Open(ctx context.Context, key string) (*minio.Object, error) {
-	return s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+	return u.String(), now.Add(s.presignTTL), nil
 }

@@ -443,7 +443,11 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
         <div className="text-sm font-medium">分发音频 · 曲目 ID：{props.id}</div>
         {(detail?.audios ?? []).length > 0 ? (
           <>
-            <TrackPlayButton track={detail!} />
+            <TrackPlayButton
+              track={detail!}
+              scope={window.location.origin}
+              resolvePlaybackURL={(id) => api.admin.audio.playbackURL(id)}
+            />
             <div className="divide-y rounded-none border text-xs">
               {(detail?.audios ?? []).map((au, index) => (
                 <Fragment key={au.id}>
@@ -480,6 +484,27 @@ function TrackEditor(props: { id: string; onChanged: () => void }) {
                   {o.format} · {Math.round(o.bitrate / 1000)} kbps · {(o.size / 1048576).toFixed(1)} MB
                 </span>
                 <code className="text-muted-foreground">{o.hash.slice(0, 12)}…</code>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto h-6"
+                  onClick={() => {
+                    void api.admin.audio
+                      .originDownloadURL(o.id)
+                      .then((signed) => {
+                        const link = document.createElement('a');
+                        link.href = signed.url;
+                        link.rel = 'noreferrer';
+                        link.referrerPolicy = 'no-referrer';
+                        link.click();
+                      })
+                      .catch(() => {
+                        // API 客户端已显示错误；这里只负责避免事件处理器产生未处理拒绝。
+                      });
+                  }}
+                >
+                  下载原始文件
+                </Button>
               </div>
             </Fragment>
           ))

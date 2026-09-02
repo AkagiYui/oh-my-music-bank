@@ -16,7 +16,8 @@ const ENDPOINTS: {
   desc: string;
 }[] = [
   { method: 'GET', path: '/api/open/v1/search?q={关键词}', desc: '按标题或别名搜索可用曲目' },
-  { method: 'GET', path: '/api/open/v1/tracks/{id}', desc: '获取曲目详情与各音质音频地址' },
+  { method: 'GET', path: '/api/open/v1/tracks/{id}', desc: '获取曲目详情与各音质元数据' },
+  { method: 'POST', path: '/api/open/v1/audios/{id}/playback-url', desc: '获取临时播放地址' },
 ];
 function Step(props: { n: number; title: string; children: React.ReactNode }) {
   return (

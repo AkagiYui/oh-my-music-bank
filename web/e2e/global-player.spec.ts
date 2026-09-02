@@ -40,7 +40,12 @@ async function setupPlayer(page: Page) {
           ...track,
           audios: [
             track.audios![0],
-            { ...track.audios![0], id: 'audio-2', qualityLabel: 'lossless', url: '/test-audio-hq.wav', loudness: -8 },
+            {
+              ...track.audios![0],
+              id: '22222222-2222-7222-8222-222222222222',
+              qualityLabel: 'lossless',
+              loudness: -8,
+            },
           ],
         },
       },

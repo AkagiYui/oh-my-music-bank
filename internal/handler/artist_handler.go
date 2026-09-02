@@ -223,7 +223,7 @@ func (h *ArtistHandler) Delete(c *gin.Context) {
 			return err
 		}
 		if item.AvatarKey != nil {
-			if err := objectgc.Schedule(tx, *item.AvatarKey, 0); err != nil {
+			if err := objectgc.Schedule(tx, objectstore.BucketPublic, *item.AvatarKey, 0); err != nil {
 				return err
 			}
 		}

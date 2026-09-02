@@ -82,11 +82,21 @@ test('独立域名用于真实搜索、详情及签名媒体地址，管理请�
   );
   const destinations: string[] = [];
   await page.route('https://api.example.test/api/open/v1/**', async (route) => {
-    destinations.push(route.request().url());
+    const requestURL = route.request().url();
+    destinations.push(requestURL);
     expect(route.request().headers()['x-api-key']).toBe('omb_test');
     expect(route.request().headers().authorization).toBeUndefined();
     await route.fulfill({
-      json: route.request().url().includes('/search?') ? { data: [track], total: 1 } : { data: track },
+      json: requestURL.includes('/search?')
+        ? { data: [track], total: 1 }
+        : requestURL.endsWith('/playback-url')
+          ? {
+              data: {
+                url: 'https://api.example.test/test-audio.wav',
+                expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+              },
+            }
+          : { data: track },
     });
   });
   await page.goto('/search');
@@ -96,7 +106,7 @@ test('独立域名用于真实搜索、详情及签名媒体地址，管理请�
   await page.getByRole('button', { name: /测试曲目.*测试艺术家/ }).click();
   await page.getByRole('button', { name: '播放 测试曲目', exact: true }).click();
   await expect(page.locator('audio')).toHaveAttribute('src', 'https://api.example.test/test-audio.wav');
-  expect(destinations).toHaveLength(2);
+  expect(destinations).toHaveLength(3);
   await page.goto('/admin/settings');
   await expect(page.getByLabel('系统标题', { exact: true })).toHaveValue('Music Bank');
   app.assertNoErrors();

@@ -218,8 +218,8 @@ function SettingsEditor({ initial }: { initial: SiteSettings }) {
                 <FieldDescription>{originError || `当前生效地址：${effectiveOrigin}/api/open/v1`}</FieldDescription>
               </Field>
               <FieldDescription>
-                请先完成域名解析、TLS 与反向代理，开放 /api/open/v1 和 /api/v1/media 路径，并允许本站跨域请求携带
-                X-API-Key。品牌设置不会自动配置 DNS 或网关。
+                请先完成域名解析、TLS 与反向代理，开放 /api/open/v1，并允许本站跨域发送 X-API-Key。 私有音频将由该 API
+                签发对象存储临时地址；品牌设置不会自动配置 DNS、网关或存储桶策略。
               </FieldDescription>
             </FieldGroup>
           </CardContent>

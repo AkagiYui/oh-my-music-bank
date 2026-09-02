@@ -38,7 +38,7 @@ export const track: TrackDTO = {
   lrcLyric: '',
   audios: [
     {
-      id: 'audio-1',
+      id: '11111111-1111-7111-8111-111111111111',
       qualityLabel: 'standard',
       format: 'wav',
       bitrate: 128000,
@@ -47,7 +47,6 @@ export const track: TrackDTO = {
       channelCount: 2,
       duration: 120,
       size: 1024,
-      url: '/test-audio.wav',
     },
   ],
   origins: [],
@@ -129,7 +128,23 @@ export async function mockApp(page: Page, loggedIn = true) {
       pageSize: Number(url.searchParams.get('pageSize') ?? 20),
     });
     let response: unknown = { data: {} };
-    if (path.endsWith('/auth/login') || path.endsWith('/auth/register'))
+    if (path.endsWith('/playback-url'))
+      response = {
+        data: {
+          url: path.includes('22222222-2222-7222-8222-222222222222')
+            ? new URL('/test-audio-hq.wav', url.origin).href
+            : new URL('/test-audio.wav', url.origin).href,
+          expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+        },
+      };
+    else if (path.endsWith('/download-url'))
+      response = {
+        data: {
+          url: new URL('/test-audio.wav', url.origin).href,
+          expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+        },
+      };
+    else if (path.endsWith('/auth/login') || path.endsWith('/auth/register'))
       response = { data: { user, accessToken: 'test-access', refreshToken: 'test-refresh' } };
     else if (path.endsWith('/auth/me')) response = { data: user };
     else if (path.endsWith('/site/settings')) {

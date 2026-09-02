@@ -61,13 +61,18 @@ Containerfile Caddyfile docker-entrypoint.sh docker-compose.yml
 首次开发时，在仓库根目录执行：
 
 ```bash
-cp .env.example .env        # 填入 DB / S3_* / FILE_PREFIX，JWT_SECRET 至少 32 字节
+cp .env.example .env        # 填入 DB / S3_*，JWT_SECRET 至少 32 字节
 vp -C web install --frozen-lockfile
 ```
 
 运行 `openssl rand -hex 32` 生成随机密钥，将结果填入 `.env` 的 `JWT_SECRET`。
 已有 `.env` 也需要检查这一项；未设置或不足 32 字节时，后端会拒绝启动。
 密钥应持久保存，修改后需要重新登录。不要将 `.env` 提交到仓库。
+
+对象存储必须使用两个不同的桶：公共桶仅开放封面对象的匿名读取，私有桶不设匿名策略，
+音频播放与原始文件下载由 API 鉴权后按需签发 S3 临时 URL。应用 AK/SK 应只授予这两个桶所需的
+列举、读写和删除权限，不要使用 MinIO 管理员凭据。完整策略与切换步骤见
+[`docs/object-storage.md`](docs/object-storage.md)。
 
 之后只需一个命令，同时启动前后端：
 
@@ -94,11 +99,14 @@ vp -C web run dev
 
 | 方法 | 路径                       | 说明                      |
 | ---- | -------------------------- | ------------------------- |
-| GET  | `/api/open/v1/search?q=`   | 按标题/别名搜索可用曲目   |
-| GET  | `/api/open/v1/tracks/{id}` | 曲目详情 + 各音质音频地址 |
+| GET  | `/api/open/v1/search?q=`                    | 按标题/别名搜索可用曲目       |
+| GET  | `/api/open/v1/tracks/{id}`                  | 曲目详情与各音质元数据         |
+| POST | `/api/open/v1/audios/{id}/playback-url`     | 按需签发私有音频临时播放地址   |
 
 管理与账户接口（JWT 鉴权，`/api/v1/...`）：注册/登录/刷新、API Key 自助管理、
-管理员的用户管理、曲目管理、音频上传（`POST /api/v1/admin/audio/upload`，multipart `file`）。
+管理员的用户管理、曲目管理、音频上传（`POST /api/v1/admin/audios/upload`，multipart `file`）、
+试听签名（`POST /api/v1/admin/audios/{id}/playback-url`）与原始文件下载签名
+（`POST /api/v1/admin/origin-audios/{id}/download-url`）。
 
 首个注册的账号自动成为管理员。
 
@@ -159,12 +167,12 @@ Logo、图标与页脚链接接受 HTTPS 地址或 `/branding/logo.svg` 这样�
 
 API 独立域名填写完整来源，例如 `https://api.example.com:8443`，不包含 `/api`、查询参数、
 片段或凭据。留空时由浏览器读取 `window.location.origin`，保留当前协议、域名和端口；
-表单显示的占位地址不会写回数据库。独立域名同时用于首页 cURL 示例及搜索的真实请求，
-签名音频的相对路径也从该 API 来源解析。登录、管理及公开站点配置接口继续走前端同源的
+表单显示的占位地址不会写回数据库。独立域名同时用于首页 cURL 示例、搜索和播放地址签发请求。
+签发结果是对象存储的短期 HTTPS 地址。登录、管理及公开站点配置接口继续走前端同源的
 `/api/v1/...` 反向代理，域名配置错误时仍能进入管理后台修正。
 
 独立 API 域名需由部署者预先完成 DNS、HTTPS 和反向代理，连接到同一后端服务与数据库，
-至少放行 `/api/open/v1/*` 和 `/api/v1/media/*`。跨域搜索需允许前端来源的 CORS 请求及
+至少放行 `/api/open/v1/*`。跨域搜索与播放签发需允许前端来源的 CORS 请求及
 `X-API-Key` 请求头（服务当前已允许无 Cookie 的跨域请求；外层网关也需放行 OPTIONS）。
 搜索不会向独立 API 发送网页登录 JWT 或浏览器 Cookie，也不会跟随重定向转发 API Key。
 API 域名应直接返回响应；HTTPS 前端不能配置 HTTP API。

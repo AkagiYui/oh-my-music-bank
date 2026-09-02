@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/akagiyui/oh-my-music-bank/internal/model"
 	"github.com/akagiyui/oh-my-music-bank/internal/service/objectgc"
+	"github.com/akagiyui/oh-my-music-bank/internal/storage/objectstore"
 	pkgerrors "github.com/akagiyui/oh-my-music-bank/pkg/errors"
 	"github.com/akagiyui/oh-my-music-bank/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -83,7 +84,7 @@ func (h *TrackHandler) Merge(c *gin.Context) {
 		if to.CoverKey == nil || *to.CoverKey == "" {
 			updates["cover_key"] = from.CoverKey
 		} else if from.CoverKey != nil {
-			if err := objectgc.Schedule(tx, *from.CoverKey, 0); err != nil {
+			if err := objectgc.Schedule(tx, objectstore.BucketPublic, *from.CoverKey, 0); err != nil {
 				return err
 			}
 		}
@@ -146,7 +147,7 @@ func (h *ArtistHandler) Merge(c *gin.Context) {
 				return err
 			}
 		} else if from.AvatarKey != nil {
-			if err := objectgc.Schedule(tx, *from.AvatarKey, 0); err != nil {
+			if err := objectgc.Schedule(tx, objectstore.BucketPublic, *from.AvatarKey, 0); err != nil {
 				return err
 			}
 		}

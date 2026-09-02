@@ -8,9 +8,9 @@ import { formatDuration } from '../lib/utils';
 import { requestAudioFocus, subscribeAudioFocus } from '../lib/audio-focus';
 
 export interface PlayerSource {
-  id?: string;
+  id: string;
   label: string;
-  url: string;
+  resolve: () => Promise<{ url: string; expiresAt: string }>;
   loudness?: number | null;
 }
 export interface PlayerControls {
@@ -50,7 +50,7 @@ function savePreference(key: string, value: string) {
 
 export function AudioPlayer(props: PlayerProps) {
   // 只有主动选择另一首曲目才重建会话，页面卸载不再决定播放器生命周期。
-  return <PlayerSession key={props.trackKey ?? props.sources[0]?.id ?? props.sources[0]?.url ?? ''} {...props} />;
+  return <PlayerSession key={props.trackKey ?? props.sources[0]?.id ?? ''} {...props} />;
 }
 function PlayerSession({
   sources,
@@ -66,7 +66,11 @@ function PlayerSession({
   const restoreRef = useRef<number | null>(null);
   const wantsPlay = useRef(autoPlay);
   const playAttempt = useRef(0);
+  const retriedAfterMediaError = useRef(false);
   const [idx, setIdx] = useState(0);
+  const [resolved, setResolved] = useState<{ url: string; expiresAt: string } | null>(null);
+  const resolvedRef = useRef(resolved);
+  const [resolveNonce, setResolveNonce] = useState(autoPlay ? 1 : 0);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [cur, setCur] = useState(0);
@@ -79,7 +83,7 @@ function PlayerSession({
   const [normalize, setNormalize] = useState(() => preference(NORM_KEY) !== 'off');
   const index = Math.min(idx, Math.max(0, sources.length - 1));
   const source = sources[index];
-  const url = source?.url ?? '';
+  const url = resolved?.url ?? '';
   const multiplier =
     !normalize || source?.loudness == null ? 1 : Math.min(1, 10 ** ((TARGET_LUFS - source.loudness) / 20));
 
@@ -92,8 +96,15 @@ function PlayerSession({
   }, []);
   const play = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio?.getAttribute('src')) return;
     wantsPlay.current = true;
+    const signed = resolvedRef.current;
+    if (!signed || Date.parse(signed.expiresAt) <= Date.now() + 30_000) {
+      if (audio && audio.currentTime > 0) restoreRef.current = audio.currentTime;
+      setLoading(true);
+      setResolveNonce((value) => value + 1);
+      return;
+    }
+    if (!audio?.getAttribute('src')) return;
     const attempt = ++playAttempt.current;
     requestAudioFocus(audio);
     setLoading(true);
@@ -123,6 +134,31 @@ function PlayerSession({
     [pause],
   );
   useEffect(() => {
+    resolvedRef.current = resolved;
+  }, [resolved]);
+  useEffect(() => {
+    if (!source || resolveNonce === 0) return;
+    let cancelled = false;
+    setLoading(wantsPlay.current);
+    void source
+      .resolve()
+      .then((next) => {
+        if (cancelled) return;
+        setResolved(next);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        wantsPlay.current = false;
+        setLoading(false);
+        setPlaying(false);
+        notifyError('无法获取播放地址，请检查权限或网络后重试');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolveNonce, source]);
+  useEffect(() => {
+    if (!url) return;
     const audio = audioRef.current!;
     audio.load();
     // 首次播放直接发起；切音质需等待新元数据后恢复位置。
@@ -131,7 +167,7 @@ function PlayerSession({
       ++playAttempt.current;
     };
     return () => {
-      restoreRef.current = audio.currentTime || 0;
+      restoreRef.current = audio.currentTime > 0 ? audio.currentTime : null;
       invalidate();
       audio.pause();
     };
@@ -193,8 +229,18 @@ function PlayerSession({
         onCanPlay={() => setLoading(false)}
         onError={(e) => {
           if (audioRef.current !== e.currentTarget) return;
+          if (wantsPlay.current && !retriedAfterMediaError.current && source) {
+            retriedAfterMediaError.current = true;
+            const position = e.currentTarget.currentTime || cur;
+            restoreRef.current = position > 0 ? position : null;
+            wantsPlay.current = true;
+            setLoading(true);
+            setResolved(null);
+            setResolveNonce((value) => value + 1);
+            return;
+          }
           pause();
-          notifyError('音频加载失败：可能已下架、凭证过期或格式不受支持，请刷新详情后重试');
+          notifyError('音频加载失败：资源可能已下架或格式不受支持');
         }}
       />
       <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-3 lg:row-span-2">
@@ -213,7 +259,7 @@ function PlayerSession({
       <Button
         className="col-start-2 row-start-1 justify-self-center"
         size="icon-lg"
-        disabled={!url}
+        disabled={!source}
         aria-label={playing || loading ? '暂停' : '播放'}
         onClick={toggle}
       >
@@ -273,11 +319,14 @@ function PlayerSession({
               ++playAttempt.current;
               audioRef.current!.pause();
               setLoading(wantsPlay.current);
+              retriedAfterMediaError.current = false;
+              setResolved(null);
               setIdx(next);
+              if (wantsPlay.current) setResolveNonce((value) => value + 1);
             }}
           >
             {sources.map((s, i) => (
-              <NativeSelectOption key={s.id ?? s.url} value={i}>
+              <NativeSelectOption key={s.id} value={i}>
                 {s.label}
               </NativeSelectOption>
             ))}

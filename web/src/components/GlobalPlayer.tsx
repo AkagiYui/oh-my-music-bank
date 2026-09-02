@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { useAuth } from '../stores/auth';
 import { useSiteConfig } from './SiteBranding';
 import { resolveAPIOrigin } from '../lib/site';
-import type { TrackDTO } from '../lib/api';
+import type { PresignedURL, TrackDTO } from '../lib/api';
 
 export interface PlaybackTrack {
   id: string;
@@ -125,9 +125,17 @@ export function PlayerSessionBoundary() {
 }
 
 /** 页面只保留播放入口；音频元素与播放进度始终由根布局持有。 */
-export function TrackPlayButton({ track, origin = window.location.origin }: { track: TrackDTO; origin?: string }) {
+export function TrackPlayButton({
+  track,
+  scope,
+  resolvePlaybackURL,
+}: {
+  track: TrackDTO;
+  scope: string;
+  resolvePlaybackURL: (audioID: string) => Promise<PresignedURL>;
+}) {
   const player = useGlobalPlayer();
-  const id = `${origin}:${track.id}`;
+  const id = `${scope}:${track.id}`;
   const active = player.track?.id === id;
   return (
     <Button
@@ -143,7 +151,7 @@ export function TrackPlayButton({ track, origin = window.location.origin }: { tr
           sources: (track.audios ?? []).map((audio) => ({
             id: audio.id,
             label: `${audio.qualityLabel} · ${Math.round(audio.bitrate / 1000)}kbps`,
-            url: audio.url,
+            resolve: () => resolvePlaybackURL(audio.id),
             loudness: audio.loudness,
           })),
         })

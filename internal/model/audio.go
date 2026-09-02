@@ -10,7 +10,7 @@ const (
 
 // OriginAudio 原始音频，管理员上传的源文件。
 type OriginAudio struct {
-	BigIDBase
+	Base
 	TrackID      int64   `gorm:"column:track_id"      json:"trackId,string"`
 	Size         int64   `json:"size"`
 	FileKey      string  `gorm:"column:file_key"      json:"fileKey"`
@@ -31,7 +31,7 @@ func (OriginAudio) TableName() string { return "origin_audio" }
 
 // Audio 用于分发的音频，一首歌每个音质档位一行。
 type Audio struct {
-	BigIDBase
+	Base
 	TrackID      int64    `gorm:"column:track_id"      json:"trackId,string"`
 	Size         int64    `json:"size"`
 	FileKey      string   `gorm:"column:file_key"      json:"fileKey"`

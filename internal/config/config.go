@@ -1,12 +1,13 @@
 // Package config 负责加载和解析应用配置。
 //
 // 配置来源优先级：环境变量 > config.yaml > 内置默认值。
-// 为兼容仓库既有 .env，显式绑定了 DB / S3_* / FILE_PREFIX 等裸环境变量名，
+// 显式绑定 DB / S3_* 等环境变量名，
 // 同时也接受 OMMB_ 前缀的结构化覆盖（如 OMMB_SERVER_PORT）。
 package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -56,12 +57,14 @@ type Auth struct {
 
 // Storage S3 兼容对象存储配置。
 type Storage struct {
-	Endpoint   string `mapstructure:"endpoint"`    // 如 https://cn-nb1.rains3.com
-	AccessKey  string `mapstructure:"access_key"`  //
-	SecretKey  string `mapstructure:"secret_key"`  //
-	Bucket     string `mapstructure:"bucket"`      //
-	Region     string `mapstructure:"region"`      // 多数 S3 兼容服务可留空
-	FilePrefix string `mapstructure:"file_prefix"` // 对外访问前缀，如 https://bucket.cn-nb1.rains3.com
+	Endpoint        string `mapstructure:"endpoint"`          // 如 https://cn-nb1.rains3.com
+	AccessKey       string `mapstructure:"access_key"`        // 应用专用的最小权限 Access Key
+	SecretKey       string `mapstructure:"secret_key"`        // 应用专用的最小权限 Secret Key
+	PublicBucket    string `mapstructure:"public_bucket"`     // 封面等公开静态资源桶
+	PrivateBucket   string `mapstructure:"private_bucket"`    // 音频、原始文件与暂存文件桶
+	Region          string `mapstructure:"region"`            // 多数 S3 兼容服务可留空
+	PublicBaseURL   string `mapstructure:"public_base_url"`   // 公开桶或 CDN 的访问前缀
+	PresignedURLTTL string `mapstructure:"presigned_url_ttl"` // 私有对象临时 URL 有效期
 }
 
 // Upload 上传相关限制。
@@ -93,8 +96,13 @@ func (s Storage) PublicURL(key string) string {
 	if key == "" {
 		return ""
 	}
-	prefix := strings.TrimRight(s.FilePrefix, "/")
+	prefix := strings.TrimRight(s.PublicBaseURL, "/")
 	return prefix + "/" + strings.TrimLeft(key, "/")
+}
+
+// PresignedURLDuration 解析私有对象临时 URL 的有效期。
+func (s Storage) PresignedURLDuration() (time.Duration, error) {
+	return parseDuration("storage.presigned_url_ttl", s.PresignedURLTTL)
 }
 
 // envBindings 将结构化配置键映射到可接受的环境变量名（首个命中者生效）。
@@ -115,9 +123,11 @@ var envBindings = map[string][]string{
 	"storage.endpoint":                 {"OMMB_STORAGE_ENDPOINT", "S3_ENDPOINT"},
 	"storage.access_key":               {"OMMB_STORAGE_ACCESS_KEY", "S3_ACCESS_KEY"},
 	"storage.secret_key":               {"OMMB_STORAGE_SECRET_KEY", "S3_SECRET_KEY"},
-	"storage.bucket":                   {"OMMB_STORAGE_BUCKET", "S3_BUCKET"},
+	"storage.public_bucket":            {"OMMB_STORAGE_PUBLIC_BUCKET", "S3_PUBLIC_BUCKET"},
+	"storage.private_bucket":           {"OMMB_STORAGE_PRIVATE_BUCKET", "S3_PRIVATE_BUCKET"},
 	"storage.region":                   {"OMMB_STORAGE_REGION", "S3_REGION"},
-	"storage.file_prefix":              {"OMMB_STORAGE_FILE_PREFIX", "FILE_PREFIX"},
+	"storage.public_base_url":          {"OMMB_STORAGE_PUBLIC_BASE_URL", "S3_PUBLIC_BASE_URL"},
+	"storage.presigned_url_ttl":        {"OMMB_STORAGE_PRESIGNED_URL_TTL"},
 	"upload.max_size_mb":               {"OMMB_UPLOAD_MAX_SIZE_MB"},
 }
 
@@ -136,6 +146,9 @@ func Load(configPath string) (*Config, error) {
 	if err := validateDatabase(cfg.Database); err != nil {
 		return nil, err
 	}
+	if err := validateStorage(cfg.Storage); err != nil {
+		return nil, err
+	}
 	if _, err := cfg.Auth.AccessTokenDuration(); err != nil {
 		return nil, err
 	}
@@ -143,6 +156,32 @@ func Load(configPath string) (*Config, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+func validateStorage(cfg Storage) error {
+	for name, value := range map[string]string{
+		"endpoint": cfg.Endpoint, "access_key": cfg.AccessKey, "secret_key": cfg.SecretKey,
+		"public_bucket": cfg.PublicBucket, "private_bucket": cfg.PrivateBucket, "public_base_url": cfg.PublicBaseURL,
+	} {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("storage.%s is required", name)
+		}
+	}
+	if cfg.PublicBucket == cfg.PrivateBucket {
+		return fmt.Errorf("storage.public_bucket and storage.private_bucket must be different")
+	}
+	u, err := url.Parse(cfg.PublicBaseURL)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("storage.public_base_url must be an absolute HTTPS URL without query or fragment")
+	}
+	ttl, err := cfg.PresignedURLDuration()
+	if err != nil {
+		return err
+	}
+	if ttl < time.Minute || ttl > 7*24*time.Hour {
+		return fmt.Errorf("storage.presigned_url_ttl must be between 1m and 168h")
+	}
+	return nil
 }
 
 // LoadDatabase 供维护命令复用配置来源，无需提供 JWT 或对象存储配置。
@@ -213,6 +252,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.access_token_ttl", defaultAccessTokenTTL)
 	v.SetDefault("auth.refresh_token_ttl", defaultRefreshTokenTTL)
 	v.SetDefault("upload.max_size_mb", defaultUploadMaxSizeMB)
+	v.SetDefault("storage.presigned_url_ttl", "30m")
 }
 
 // parseDuration 解析时间字符串，额外支持 "d"（天）单位。

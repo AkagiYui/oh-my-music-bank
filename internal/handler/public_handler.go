@@ -132,7 +132,7 @@ func (h *PublicHandler) Search(c *gin.Context) {
 	response.Paginated(c, out, total, page, pageSize)
 }
 
-// GetTrack 返回单个可用曲目的详情，含各音质音频地址。
+// GetTrack 返回单个可用曲目的详情与音频元数据；播放地址由独立接口按需签发。
 func (h *PublicHandler) GetTrack(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -144,5 +144,5 @@ func (h *PublicHandler) GetTrack(c *gin.Context) {
 		c.JSON(http.StatusNotFound, pkgerrors.NotFound("track not found"))
 		return
 	}
-	response.Success(c, buildTrackDTO(c, h.db, h.store, &t, true))
+	response.Success(c, buildTrackDTO(h.db, h.store, &t, true))
 }

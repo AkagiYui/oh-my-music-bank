@@ -99,13 +99,17 @@ async function request(path: string, init: RequestInit = {}, auth = false): Prom
   }
 }
 
-async function openRequest(origin: string, apiKey: string, path: string): Promise<any> {
+async function openRequest(origin: string, apiKey: string, path: string, init: RequestInit = {}): Promise<any> {
   // 公开 API 使用独立来源，禁止携带浏览器 Cookie 或跟随重定向转发密钥。
+  const headers = new Headers(init.headers);
+  headers.set('X-API-Key', apiKey);
   const res = await fetch(new URL(path, origin).href, {
-    headers: { 'X-API-Key': apiKey },
+    ...init,
+    headers,
     credentials: 'omit',
     redirect: 'error',
     referrerPolicy: 'no-referrer',
+    cache: 'no-store',
   });
   return parseResponse(res);
 }
@@ -219,11 +223,9 @@ export interface AudioDTO {
   duration: number;
   size: number;
   loudness?: number | null;
-  url: string;
 }
 export interface OriginDTO {
   id: string;
-  fileKey: string;
   hash: string;
   format: string;
   encoder: string;
@@ -231,8 +233,14 @@ export interface OriginDTO {
   size: number;
   duration: number;
   bitrate: number;
-  url: string;
+  samplingRate: number;
+  bitDepth: number;
+  channelCount: number;
   createdAt: string;
+}
+export interface PresignedURL {
+  url: string;
+  expiresAt: string;
 }
 export interface TrackDTO {
   id: string;
@@ -507,9 +515,17 @@ export const api = {
         fd.append('file', file);
         if (fields.title) fd.append('title', fields.title);
         if (fields.artist) fd.append('artist', fields.artist);
-        return request('/api/v1/admin/audio/upload', { method: 'POST', body: fd }, true).then((r) => r.data.track);
+        return request('/api/v1/admin/audios/upload', { method: 'POST', body: fd }, true).then((r) => r.data.track);
       },
-      remove: (id: string) => request(`/api/v1/admin/audio/${id}`, { method: 'DELETE' }, true),
+      remove: (id: string) => request(`/api/v1/admin/audios/${id}`, { method: 'DELETE' }, true),
+      playbackURL: (id: string): Promise<PresignedURL> =>
+        request(`/api/v1/admin/audios/${id}/playback-url`, { method: 'POST', cache: 'no-store' }, true).then(
+          (r) => r.data,
+        ),
+      originDownloadURL: (id: string): Promise<PresignedURL> =>
+        request(`/api/v1/admin/origin-audios/${id}/download-url`, { method: 'POST', cache: 'no-store' }, true).then(
+          (r) => r.data,
+        ),
     },
     site: {
       get: (signal?: AbortSignal): Promise<SiteSettings> =>
@@ -612,13 +628,10 @@ export const api = {
     ): Promise<Paginated<TrackDTO>> =>
       openRequest(origin, apiKey, `/api/open/v1/search${qs({ q, page, pageSize: 20, ...filters })}`),
     getTrack: (origin: string, apiKey: string, id: string): Promise<TrackDTO> =>
-      openRequest(origin, apiKey, `/api/open/v1/tracks/${id}`).then((r) => ({
-        ...r.data,
-        // 签名媒体地址为相对 API 路径，必须从 API 来源解析，不能误用 SPA 域名。
-        audios: r.data.audios?.map((audio: AudioDTO) => ({
-          ...audio,
-          url: audio.url ? new URL(audio.url, origin).href : '',
-        })),
-      })),
+      openRequest(origin, apiKey, `/api/open/v1/tracks/${id}`).then((r) => r.data),
+    playbackURL: (origin: string, apiKey: string, id: string): Promise<PresignedURL> =>
+      openRequest(origin, apiKey, `/api/open/v1/audios/${id}/playback-url`, {
+        method: 'POST',
+      }).then((r) => r.data),
   },
 };

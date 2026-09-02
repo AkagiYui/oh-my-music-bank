@@ -2,19 +2,15 @@ package handler
 
 import (
 	"fmt"
+	"net/url"
+	"time"
+
 	"github.com/akagiyui/oh-my-music-bank/internal/config"
 	"github.com/akagiyui/oh-my-music-bank/internal/middleware"
-	"github.com/akagiyui/oh-my-music-bank/internal/model"
 	"github.com/akagiyui/oh-my-music-bank/internal/service/session"
-	"github.com/akagiyui/oh-my-music-bank/internal/storage/objectstore"
 	pkgerrors "github.com/akagiyui/oh-my-music-bank/pkg/errors"
 	"github.com/akagiyui/oh-my-music-bank/pkg/response"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
-	"net/http"
-	"net/url"
-	"path"
-	"time"
 )
 
 func mediaURL(c *gin.Context, resource string) string {
@@ -53,59 +49,4 @@ func (h *BilibiliHandler) MediaToken(c *gin.Context) {
 	}
 	// 账号 ID 是媒体签名资源的一部分，不能替换查询参数借用其他账号。
 	response.Success(c, gin.H{"url": mediaURL(c, fmt.Sprintf("/api/v1/admin/bilibili/stream?accountId=%s&bvid=%s&cid=%d", url.QueryEscape(a.ID), url.QueryEscape(r.Bvid), r.CID))})
-}
-func ServeMedia(db *gorm.DB, store *objectstore.Store) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		id, ok := parseInt64Param(c, "id")
-		if !ok {
-			return
-		}
-		key := ""
-		trackID := int64(0)
-		switch c.Param("kind") {
-		case "audio":
-			var a model.Audio
-			if db.First(&a, id).Error != nil {
-				c.Status(404)
-				return
-			}
-			key = a.FileKey
-			trackID = a.TrackID
-		case "origin":
-			if c.GetString(middleware.CtxUserRole) != "admin" {
-				c.Status(403)
-				return
-			}
-			var a model.OriginAudio
-			if db.First(&a, id).Error != nil {
-				c.Status(404)
-				return
-			}
-			key = a.FileKey
-			trackID = a.TrackID
-		default:
-			c.Status(404)
-			return
-		}
-		var t model.Track
-		if db.First(&t, trackID).Error != nil || (!t.Available && c.GetString(middleware.CtxUserRole) != "admin") {
-			c.Status(404)
-			return
-		}
-		object, err := store.Open(c.Request.Context(), key)
-		if err != nil {
-			c.Status(502)
-			return
-		}
-		defer object.Close()
-		stat, err := object.Stat()
-		if err != nil {
-			c.Status(404)
-			return
-		}
-		c.Header("Content-Type", stat.ContentType)
-		c.Header("X-Content-Type-Options", "nosniff")
-		// 由服务端处理 Range，每次新请求都会重新检查撤销状态。
-		http.ServeContent(c.Writer, c.Request, path.Base(key), stat.LastModified, object)
-	}
 }

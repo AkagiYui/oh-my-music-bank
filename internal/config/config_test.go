@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDatabaseOnlyConfig(t *testing.T) {
@@ -40,5 +41,26 @@ func TestDatabaseOnlyConfig(t *testing.T) {
 	t.Setenv("OMMB_DATABASE_DSN", "")
 	if _, err := LoadDatabase("missing.yaml"); err == nil {
 		t.Fatal("missing database config accepted")
+	}
+}
+
+func TestStorageValidationAndPublicURL(t *testing.T) {
+	cfg := Storage{
+		Endpoint: "https://s3.example.com", AccessKey: "app", SecretKey: "secret",
+		PublicBucket: "covers", PrivateBucket: "media", PublicBaseURL: "https://cdn.example.com/assets/",
+		PresignedURLTTL: "30m",
+	}
+	if err := validateStorage(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.PublicURL("/cover/a.jpg"); got != "https://cdn.example.com/assets/cover/a.jpg" {
+		t.Fatalf("public URL %q", got)
+	}
+	if got, err := cfg.PresignedURLDuration(); err != nil || got != 30*time.Minute {
+		t.Fatalf("presign ttl %s, %v", got, err)
+	}
+	cfg.PrivateBucket = cfg.PublicBucket
+	if err := validateStorage(cfg); err == nil {
+		t.Fatal("same public and private bucket accepted")
 	}
 }

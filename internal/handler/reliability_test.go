@@ -171,7 +171,7 @@ func TestConcurrentAdministratorBootstrap(t *testing.T) {
 func fakeStore(t *testing.T) (*objectstore.Store, *sync.Map) {
 	objects := &sync.Map{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := strings.TrimPrefix(r.URL.Path, "/bucket/")
+		key := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/private/"), "/public/")
 		switch r.Method {
 		case "PUT":
 			b, _ := io.ReadAll(r.Body)
@@ -194,7 +194,11 @@ func fakeStore(t *testing.T) (*objectstore.Store, *sync.Map) {
 		}
 	}))
 	t.Cleanup(server.Close)
-	store, e := objectstore.New(config.Storage{Endpoint: server.URL, AccessKey: "test", SecretKey: "test-only", Bucket: "bucket", Region: "us-east-1"})
+	store, e := objectstore.New(config.Storage{
+		Endpoint: server.URL, AccessKey: "test", SecretKey: "test-only",
+		PublicBucket: "public", PrivateBucket: "private", Region: "us-east-1",
+		PublicBaseURL: server.URL + "/public", PresignedURLTTL: "30m",
+	})
 	must(t, e)
 	return store, objects
 }
@@ -247,7 +251,7 @@ func TestConcurrentDedupAndSharedObjectDeletion(t *testing.T) {
 	}
 	var audio model.Audio
 	must(t, db.Where("track_id = ?", a).First(&audio).Error)
-	r := call(t, NewAudioHandler(db, store, config.Upload{MaxSizeMB: 10}).DeleteAudio, "DELETE", "/", nil, gin.Params{{Key: "id", Value: itoa(audio.ID)}})
+	r := call(t, NewAudioHandler(db, store, config.Upload{MaxSizeMB: 10}).DeleteAudio, "DELETE", "/", nil, gin.Params{{Key: "id", Value: audio.ID}})
 	if r.Code != 204 {
 		t.Fatalf("delete audio %d: %s", r.Code, r.Body.String())
 	}
@@ -403,45 +407,26 @@ func TestRateLimitAndRejectedRequestAudit(t *testing.T) {
 		t.Fatal("rejected request not audited")
 	}
 }
-func TestMediaTokenScopeAndRevocation(t *testing.T) {
+func TestPrivateMediaPresignedURLs(t *testing.T) {
 	db := testDB(t)
-	store, objects := fakeStore(t)
-	u := testUser(t, db, "user")
-	cfg := testConfig()
-	access, _, e := session.New(db, cfg, &u)
-	must(t, e)
-	claims, e := session.Parse(cfg, access, "access")
-	must(t, e)
+	store, _ := fakeStore(t)
 	track := model.Track{Title: "Media", Available: true, ID: 400}
 	must(t, db.Create(&track).Error)
 	a := model.Audio{TrackID: 400, FileKey: "media.wav", QualityLabel: "standard"}
 	must(t, db.Create(&a).Error)
-	objects.Store("media.wav", []byte("test-media-content"))
-	r := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(r)
-	c.Set("media_auth", cfg)
-	c.Set(middleware.CtxUserID, u.ID)
-	c.Set("session_id", claims.SessionID)
-	signed := mediaURL(c, "/api/v1/media/audio/"+itoa(a.ID))
-	engine := gin.New()
-	engine.GET("/api/v1/media/:kind/:id", middleware.MediaTokenAuth(cfg, db), ServeMedia(db, store))
-	r = httptest.NewRecorder()
-	req := httptest.NewRequest("GET", signed, nil)
-	req.Header.Set("Range", "bytes=0-3")
-	engine.ServeHTTP(r, req)
-	if r.Code != 206 || r.Body.String() != "test" {
-		t.Fatalf("range %d: %s", r.Code, r.Body.String())
+	h := NewAudioHandler(db, store, config.Upload{MaxSizeMB: 10})
+	r := call(t, h.PublicPlaybackURL, "POST", "/", nil, gin.Params{{Key: "id", Value: a.ID}})
+	if r.Code != 200 || !strings.Contains(r.Body.String(), "X-Amz-Signature") || r.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("public presign %d: %s", r.Code, r.Body.String())
 	}
-	r = httptest.NewRecorder()
-	engine.ServeHTTP(r, httptest.NewRequest("GET", strings.Replace(signed, "/audio/", "/origin/", 1), nil))
-	if r.Code != 401 {
-		t.Fatal("media token scope escaped")
+	must(t, db.Model(&track).Update("available", false).Error)
+	r = call(t, h.PublicPlaybackURL, "POST", "/", nil, gin.Params{{Key: "id", Value: a.ID}})
+	if r.Code != 404 {
+		t.Fatalf("unavailable public audio status %d", r.Code)
 	}
-	must(t, db.Where("id = ?", claims.SessionID).Delete(&model.AuthSession{}).Error)
-	r = httptest.NewRecorder()
-	engine.ServeHTTP(r, httptest.NewRequest("GET", signed, nil))
-	if r.Code != 401 {
-		t.Fatal("revoked media remained accessible")
+	r = call(t, h.AdminPlaybackURL, "POST", "/", nil, gin.Params{{Key: "id", Value: a.ID}})
+	if r.Code != 200 {
+		t.Fatalf("admin presign status %d: %s", r.Code, r.Body.String())
 	}
 }
 

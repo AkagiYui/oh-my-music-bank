@@ -91,7 +91,7 @@ for (const width of [1280, 390]) {
     await page.goto('/music/tracks');
     await page.getByRole('button', { name: '编辑', exact: true }).click();
     await page.getByRole('button', { name: '播放 测试曲目', exact: true }).click();
-    await expect(page.locator('audio')).toHaveAttribute('src', '/test-audio.wav');
+    await expect(page.locator('audio')).toHaveAttribute('src', 'http://127.0.0.1:5175/test-audio.wav');
     await expect(page.locator('[data-slot="badge"]').filter({ hasText: 'standard' })).toBeVisible();
     await expectLyraSurfaces(page);
 

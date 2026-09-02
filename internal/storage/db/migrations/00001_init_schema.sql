@@ -186,7 +186,7 @@ CREATE INDEX        IF NOT EXISTS "idx_live_artists_artist" ON "live_artists" ("
 
 -- ---------- 音频 ----------
 CREATE TABLE IF NOT EXISTS "origin_audio" (
-    "id"            bigserial    PRIMARY KEY,
+    "id"            uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
     "created_at"    timestamptz  NOT NULL DEFAULT now(),
     "updated_at"    timestamptz  NOT NULL DEFAULT now(),
     "track_id"      bigint       NOT NULL REFERENCES "track"("id") ON DELETE CASCADE,
@@ -208,7 +208,7 @@ COMMENT ON COLUMN "origin_audio"."status" IS '处理状态：pending/processing/
 CREATE INDEX IF NOT EXISTS "idx_origin_audio_track" ON "origin_audio" ("track_id");
 
 CREATE TABLE IF NOT EXISTS "audio" (
-    "id"            bigserial    PRIMARY KEY,
+    "id"            uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
     "created_at"    timestamptz  NOT NULL DEFAULT now(),
     "updated_at"    timestamptz  NOT NULL DEFAULT now(),
     "track_id"      bigint       NOT NULL REFERENCES "track"("id") ON DELETE CASCADE,

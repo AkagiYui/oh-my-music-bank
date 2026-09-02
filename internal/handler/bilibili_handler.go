@@ -274,7 +274,7 @@ func (h *BilibiliHandler) Ingest(c *gin.Context) {
 		c.JSON(422, pkgerrors.BadRequest(err.Error()))
 		return
 	}
-	response.Success(c, gin.H{"track": buildTrackDTO(c, h.db, h.store, track, true), "deduplicated": dedup})
+	response.Success(c, gin.H{"track": buildTrackDTO(h.db, h.store, track, true), "deduplicated": dedup})
 }
 
 func (h *BilibiliHandler) Recognize(c *gin.Context) {

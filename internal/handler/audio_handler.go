@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/akagiyui/oh-my-music-bank/internal/config"
@@ -23,6 +25,11 @@ type AudioHandler struct {
 	db    *gorm.DB
 	store *objectstore.Store
 	cfg   config.Upload
+}
+
+type presignedURLDTO struct {
+	URL       string    `json:"url"`
+	ExpiresAt time.Time `json:"expiresAt"`
 }
 
 // NewAudioHandler 创建音频处理器。
@@ -82,7 +89,7 @@ func (h *AudioHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	dto := buildTrackDTO(c, h.db, h.store, track, true)
+	dto := buildTrackDTO(h.db, h.store, track, true)
 	if dedup {
 		response.Success(c, gin.H{"deduplicated": true, "track": dto})
 		return
@@ -92,9 +99,13 @@ func (h *AudioHandler) Upload(c *gin.Context) {
 
 // DeleteAudio 删除某个音质档位的分发音频（同时清理对象）。
 func (h *AudioHandler) DeleteAudio(c *gin.Context) {
-	id := c.Param("id")
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest("invalid audio id"))
+		return
+	}
 	var audio model.Audio
-	if err := h.db.Where("id = ?", id).First(&audio).Error; err != nil {
+	if err := h.db.Where("id = ?", id.String()).First(&audio).Error; err != nil {
 		c.JSON(http.StatusNotFound, pkgerrors.NotFound("audio not found"))
 		return
 	}
@@ -102,11 +113,82 @@ func (h *AudioHandler) DeleteAudio(c *gin.Context) {
 		if err := tx.Delete(&audio).Error; err != nil {
 			return err
 		}
-		return objectgc.Schedule(tx, audio.FileKey, 0)
+		return objectgc.Schedule(tx, objectstore.BucketPrivate, audio.FileKey, 0)
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("failed to delete audio"))
 		return
 	}
 
 	response.NoContent(c)
+}
+
+// PublicPlaybackURL 在 API Key 鉴权后为可用曲目签发私有桶直连。
+func (h *AudioHandler) PublicPlaybackURL(c *gin.Context) {
+	h.playbackURL(c, false)
+}
+
+// AdminPlaybackURL 允许管理员试听尚未公开的曲目。
+func (h *AudioHandler) AdminPlaybackURL(c *gin.Context) {
+	h.playbackURL(c, true)
+}
+
+func (h *AudioHandler) playbackURL(c *gin.Context, allowUnavailable bool) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest("invalid audio id"))
+		return
+	}
+	var audio model.Audio
+	query := h.db.WithContext(c.Request.Context()).
+		Joins("JOIN track ON track.id = audio.track_id").
+		Where("audio.id = ?", id.String())
+	if !allowUnavailable {
+		query = query.Where("track.available = true")
+	}
+	if err := query.First(&audio).Error; err != nil {
+		c.JSON(http.StatusNotFound, pkgerrors.NotFound("audio not found"))
+		return
+	}
+	h.respondPresignedURL(c, audio.FileKey)
+}
+
+// OriginDownloadURL 为管理员签发原始音频下载直连。
+func (h *AudioHandler) OriginDownloadURL(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest("invalid origin audio id"))
+		return
+	}
+	var origin model.OriginAudio
+	if err := h.db.WithContext(c.Request.Context()).Where("id = ?", id.String()).First(&origin).Error; err != nil {
+		c.JSON(http.StatusNotFound, pkgerrors.NotFound("origin audio not found"))
+		return
+	}
+	format := strings.ToLower(origin.Format)
+	if format == "" || strings.IndexFunc(format, func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
+	}) >= 0 {
+		format = "bin"
+	}
+	url, expiresAt, err := h.store.PresignedPrivateDownload(c.Request.Context(), origin.FileKey, origin.ID+"."+format)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, pkgerrors.Internal("failed to sign media URL"))
+		return
+	}
+	respondPresignedURL(c, url, expiresAt)
+}
+
+func (h *AudioHandler) respondPresignedURL(c *gin.Context, key string) {
+	url, expiresAt, err := h.store.PresignedPrivateGet(c.Request.Context(), key)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, pkgerrors.Internal("failed to sign media URL"))
+		return
+	}
+	respondPresignedURL(c, url, expiresAt)
+}
+
+func respondPresignedURL(c *gin.Context, url string, expiresAt time.Time) {
+	c.Header("Cache-Control", "private, no-store")
+	c.Header("Referrer-Policy", "no-referrer")
+	response.Success(c, presignedURLDTO{URL: url, ExpiresAt: expiresAt})
 }

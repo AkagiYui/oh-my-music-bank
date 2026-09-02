@@ -167,7 +167,11 @@ function SearchContent({ apiOrigin }: { apiOrigin: string }) {
 
             {(selected!.audios ?? []).length > 0 ? (
               <>
-                <TrackPlayButton track={selected} origin={apiOrigin} />
+                <TrackPlayButton
+                  track={selected}
+                  scope={apiOrigin}
+                  resolvePlaybackURL={(id) => api.open.playbackURL(apiOrigin, apiKey.trim(), id)}
+                />
               </>
             ) : (
               <p className="text-sm text-muted-foreground">暂无可播放音频。</p>

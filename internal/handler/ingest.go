@@ -80,14 +80,14 @@ func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store,
 
 	reportJob(ctx, db, "保存音频与封面", 75)
 	fileKey := fmt.Sprintf("audio/%s.%s", uuid.NewString(), ext)
-	if err := objectgc.Schedule(db, fileKey, 24*time.Hour); err != nil {
+	if err := objectgc.Schedule(db, objectstore.BucketPrivate, fileKey, 24*time.Hour); err != nil {
 		return nil, false, err
 	}
 	up, err := os.Open(filePath)
 	if err != nil {
 		return nil, false, err
 	}
-	if err := store.Put(ctx, fileKey, up, size, mime.TypeByExtension("."+ext)); err != nil {
+	if err := store.Put(ctx, objectstore.BucketPrivate, fileKey, up, size, mime.TypeByExtension("."+ext)); err != nil {
 		up.Close()
 		return nil, false, fmt.Errorf("上传对象存储失败: %w", err)
 	}
@@ -104,10 +104,10 @@ func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store,
 				return nil, false, fmt.Errorf("封面超过8MB")
 			}
 			coverKey = fmt.Sprintf("cover/%s.%s", uuid.NewString(), coverExtFromMime(meta.CoverMime))
-			if err := objectgc.Schedule(db, coverKey, 24*time.Hour); err != nil {
+			if err := objectgc.Schedule(db, objectstore.BucketPublic, coverKey, 24*time.Hour); err != nil {
 				return nil, false, err
 			}
-			if err := store.Put(ctx, coverKey, bytes.NewReader(meta.CoverData), int64(len(meta.CoverData)), meta.CoverMime); err != nil {
+			if err := store.Put(ctx, objectstore.BucketPublic, coverKey, bytes.NewReader(meta.CoverData), int64(len(meta.CoverData)), meta.CoverMime); err != nil {
 				return nil, false, err
 			}
 		} else if opts.CoverURL != "" {
@@ -188,7 +188,7 @@ func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store,
 		return completeJob(ctx, tx, trackID, false)
 	})
 	if err != nil {
-		_ = objectgc.Schedule(db, fileKey, 0)
+		_ = objectgc.Schedule(db, objectstore.BucketPrivate, fileKey, 0)
 		var found model.OriginAudio
 		if e := db.Where("hash = ?", hash).First(&found).Error; e == nil {
 			var t model.Track
@@ -247,10 +247,10 @@ func downloadCover(ctx context.Context, db *gorm.DB, store *objectstore.Store, c
 		return "", errors.New("封面必须为 JPEG、PNG 或 WebP 图片")
 	}
 	key := fmt.Sprintf("cover/%s.%s", uuid.NewString(), ext)
-	if err := objectgc.Schedule(db, key, 24*time.Hour); err != nil {
+	if err := objectgc.Schedule(db, objectstore.BucketPublic, key, 24*time.Hour); err != nil {
 		return "", err
 	}
-	if err := store.Put(ctx, key, bytes.NewReader(data), int64(len(data)), mime); err != nil {
+	if err := store.Put(ctx, objectstore.BucketPublic, key, bytes.NewReader(data), int64(len(data)), mime); err != nil {
 		return "", err
 	}
 	return key, nil

@@ -9,7 +9,7 @@
 --   5. 全表补充 created_at / updated_at 时间戳。
 --   6. 歌词字段 varchar(60000) → text。
 --   7. 统一 ID 策略：曲目/艺术家为应用层分配的 bigint（雪花 ID，便于跨源去重）；
---      其余内部实体用 bigserial/serial。
+--      音频资源使用 UUID，其余内部实体用 bigserial/serial。
 --   8. 为外键反向查询补索引；为搜索补 pg_trgm GIN 索引。
 --   9. 给曲目相关从表、音频表的外键加 ON DELETE CASCADE，删歌时自动清理。
 --  10. 新增用户体系：app_user / api_key / api_request_log / settings。
@@ -255,7 +255,7 @@ CREATE INDEX        IF NOT EXISTS "idx_live_artists_artist" ON "live_artists" ("
 
 -- 原始音频：管理员上传的源文件。status 驱动「上传→解析→转码」异步流水线。
 CREATE TABLE IF NOT EXISTS "origin_audio" (
-    "id"            bigserial    PRIMARY KEY,
+    "id"            uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
     "created_at"    timestamptz  NOT NULL DEFAULT now(),
     "updated_at"    timestamptz  NOT NULL DEFAULT now(),
     "track_id"      bigint       NOT NULL REFERENCES "track"("id") ON DELETE CASCADE,
@@ -280,7 +280,7 @@ CREATE INDEX IF NOT EXISTS "idx_origin_audio_track" ON "origin_audio" ("track_id
 
 -- 分发音频：对外提供的转码版本，一首歌每个音质档位一行。
 CREATE TABLE IF NOT EXISTS "audio" (
-    "id"            bigserial    PRIMARY KEY,
+    "id"            uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
     "created_at"    timestamptz  NOT NULL DEFAULT now(),
     "updated_at"    timestamptz  NOT NULL DEFAULT now(),
     "track_id"      bigint       NOT NULL REFERENCES "track"("id") ON DELETE CASCADE,

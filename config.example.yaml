@@ -24,15 +24,17 @@ auth:
   access_token_ttl: "48h"
   refresh_token_ttl: "168h"
 
-# S3 兼容对象存储。可用 S3_* / FILE_PREFIX 环境变量覆盖。
+# S3 兼容对象存储。公共桶仅承载可匿名读取的封面，私有桶承载所有媒体文件。
 storage:
   endpoint: "https://cn-nb1.rains3.com"
   access_key: ""
   secret_key: ""
-  bucket: ""
+  public_bucket: ""
+  private_bucket: ""
   region: ""
-  # 对外访问前缀（公有读桶），如 https://<bucket>.cn-nb1.rains3.com
-  file_prefix: ""
+  # 公共桶或 CDN 的访问前缀，如 https://<bucket>.cn-nb1.rains3.com
+  public_base_url: ""
+  presigned_url_ttl: "30m"
 
 upload:
   max_size_mb: 200

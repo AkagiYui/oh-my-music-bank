@@ -102,6 +102,8 @@ test('搜索和音频错误不推移控件，搜索失败保留已有结果及�
   await expect.poll(() => audio.evaluate((element: HTMLAudioElement) => element.readyState)).toBeGreaterThan(0);
   const withResults = await layout(page);
   await audio.dispatchEvent('error');
+  await expect.poll(() => app.requests.filter((request) => request.path.endsWith('/playback-url')).length).toBe(2);
+  await audio.dispatchEvent('error');
   await expect(page.locator('[data-sonner-toast][data-front="true"] [data-description]')).toContainText('音频加载失败');
   expect(await layout(page)).toEqual(withResults);
   await page.locator('[data-sonner-toast][data-front="true"]').getByRole('button', { name: '关闭错误提示' }).click();

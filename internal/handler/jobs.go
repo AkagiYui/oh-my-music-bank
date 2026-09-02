@@ -172,8 +172,8 @@ func (j *Jobs) Upload(c *gin.Context) {
 	}
 	defer src.Close()
 	key := "staging/" + uuid.NewString() + ext
-	if err = objectgc.Schedule(j.db, key, 24*time.Hour); err == nil {
-		err = j.store.Put(c.Request.Context(), key, src, f.Size, "application/octet-stream")
+	if err = objectgc.Schedule(j.db, objectstore.BucketPrivate, key, 24*time.Hour); err == nil {
+		err = j.store.Put(c.Request.Context(), objectstore.BucketPrivate, key, src, f.Size, "application/octet-stream")
 	}
 	if err != nil {
 		c.JSON(502, pkgerrors.Internal("保存上传文件失败"))
@@ -313,7 +313,7 @@ func (j *Jobs) process(parent context.Context) {
 				name := f.Name()
 				defer os.Remove(name)
 				var src io.ReadCloser
-				src, err = j.store.Get(ctx, job.InputKey)
+				src, err = j.store.Get(ctx, objectstore.BucketPrivate, job.InputKey)
 				if err == nil {
 					var n int64
 					n, err = io.Copy(f, io.LimitReader(src, j.maxBytes+1))

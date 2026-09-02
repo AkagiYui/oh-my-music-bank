@@ -24,7 +24,7 @@ describe('API 来源', () => {
       expect(() => resolveAPIOrigin(value, 'https://music.example.test')).toThrow();
     }
   });
-  it('搜索与媒体使用 API 来源，不泄漏登录令牌、Cookie 或跟随重定向', async () => {
+  it('搜索和播放签名使用 API 来源，不泄漏登录令牌、Cookie 或跟随重定向', async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: [], total: 0 })))
@@ -33,12 +33,14 @@ describe('API 来源', () => {
           JSON.stringify({
             data: {
               id: '1',
-              audios: [
-                { id: 'a', url: '/api/v1/media/audio/1?token=signed' },
-                { id: 'b', url: 'https://cdn.example.test/audio?signature=signed' },
-              ],
+              audios: [{ id: '11111111-1111-7111-8111-111111111111' }],
             },
           }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ data: { url: 'https://s3.example.test/audio?signature=signed', expiresAt: '2030-01-01' } }),
         ),
       );
     vi.stubGlobal('fetch', fetch);
@@ -46,16 +48,27 @@ describe('API 来源', () => {
     await api.open.search('https://api.example.test', 'omb_public', '测试');
     const [url, init] = fetch.mock.calls[0];
     expect(url).toContain('https://api.example.test/api/open/v1/search?');
-    expect(init).toEqual({
-      headers: { 'X-API-Key': 'omb_public' },
+    expect(new Headers(init.headers).get('X-API-Key')).toBe('omb_public');
+    expect(init).toMatchObject({
       credentials: 'omit',
       redirect: 'error',
       referrerPolicy: 'no-referrer',
+      cache: 'no-store',
     });
     const track = await api.open.getTrack('https://api.example.test', 'omb_public', '1');
-    expect(track.audios?.map((audio) => audio.url)).toEqual([
-      'https://api.example.test/api/v1/media/audio/1?token=signed',
-      'https://cdn.example.test/audio?signature=signed',
-    ]);
+    expect(track.audios).toEqual([{ id: '11111111-1111-7111-8111-111111111111' }]);
+    const signed = await api.open.playbackURL(
+      'https://api.example.test',
+      'omb_public',
+      '11111111-1111-7111-8111-111111111111',
+    );
+    expect(signed.url).toContain('signature=signed');
+    const [playbackURL, playbackInit] = fetch.mock.calls[2];
+    expect(playbackURL).toBe(
+      'https://api.example.test/api/open/v1/audios/11111111-1111-7111-8111-111111111111/playback-url',
+    );
+    expect(playbackInit.method).toBe('POST');
+    expect(playbackInit.credentials).toBe('omit');
+    expect(new Headers(playbackInit.headers).has('Authorization')).toBe(false);
   });
 });

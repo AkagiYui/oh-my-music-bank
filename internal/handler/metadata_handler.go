@@ -109,7 +109,7 @@ func (h *MetadataHandler) Enrich(c *gin.Context) {
 		if req.CoverURL != nil {
 			updates["cover_key"] = coverKey
 			if track.CoverKey != nil {
-				if err := objectgc.Schedule(tx, *track.CoverKey, 0); err != nil {
+				if err := objectgc.Schedule(tx, objectstore.BucketPublic, *track.CoverKey, 0); err != nil {
 					return err
 				}
 			}
@@ -172,5 +172,5 @@ func (h *MetadataHandler) Enrich(c *gin.Context) {
 		c.JSON(500, pkgerrors.Internal("读取曲目失败"))
 		return
 	}
-	response.Success(c, buildTrackDTO(c, h.db, h.store, &track, true))
+	response.Success(c, buildTrackDTO(h.db, h.store, &track, true))
 }

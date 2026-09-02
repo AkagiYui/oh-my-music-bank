@@ -195,7 +195,7 @@ func (h *AlbumHandler) Delete(c *gin.Context) {
 			return err
 		}
 		if item.CoverKey != nil {
-			if err := objectgc.Schedule(tx, *item.CoverKey, 0); err != nil {
+			if err := objectgc.Schedule(tx, objectstore.BucketPublic, *item.CoverKey, 0); err != nil {
 				return err
 			}
 		}

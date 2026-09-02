@@ -85,6 +85,12 @@ func Setup(deps SetupDeps) *gin.Engine {
 		open.GET("/tracks/:id", publicHandler.GetTrack)
 	}
 
+	// 播放地址按需签发且不落 API 调用日志，避免高频播放刷新污染检索统计。
+	mediaOpen := engine.Group("/api/open/v1")
+	mediaOpen.Use(middleware.IPRateLimit(deps.DB, "open-media-ip:", 300))
+	mediaOpen.Use(middleware.APIKeyAuthMiddleware(deps.DB))
+	mediaOpen.POST("/audios/:id/playback-url", audioHandler.PublicPlaybackURL)
+
 	// 公共接口（无需鉴权）。
 	pub := engine.Group("/api/v1")
 	{
@@ -197,11 +203,13 @@ func Setup(deps SetupDeps) *gin.Engine {
 				languages.DELETE("/:id", languageHandler.Delete)
 			}
 
-			audio := admin.Group("/audio")
+			audio := admin.Group("/audios")
 			{
 				audio.POST("/upload", audioHandler.Upload)
 				audio.DELETE("/:id", audioHandler.DeleteAudio)
+				audio.POST("/:id/playback-url", audioHandler.AdminPlaybackURL)
 			}
+			admin.POST("/origin-audios/:id/download-url", audioHandler.OriginDownloadURL)
 
 			site := admin.Group("/site")
 			{
@@ -245,6 +253,5 @@ func Setup(deps SetupDeps) *gin.Engine {
 	engine.GET("/api/v1/admin/bilibili/stream",
 		middleware.MediaTokenAuth(deps.Config.Auth, deps.DB), bilibiliHandler.Stream)
 
-	engine.GET("/api/v1/media/:kind/:id", middleware.MediaTokenAuth(deps.Config.Auth, deps.DB), handler.ServeMedia(deps.DB, deps.Store))
 	return engine
 }

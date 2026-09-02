@@ -38,8 +38,8 @@ func (h *TrackHandler) Detail(c *gin.Context) {
 	if !ok {
 		return
 	}
-	dto := buildTrackDTO(c, h.db, h.store, t, true)
-	dto.Origins = buildOrigins(c, h.db, h.store, t.ID)
+	dto := buildTrackDTO(h.db, h.store, t, true)
+	dto.Origins = buildOrigins(h.db, t.ID)
 
 	var aliasRows []model.TrackAlias
 	h.db.Where("track_id = ?", t.ID).Order("alias ASC").Find(&aliasRows)
@@ -124,18 +124,18 @@ func (h *TrackHandler) Delete(c *gin.Context) {
 		if err := tx.Where("track_id = ?", id).Find(&origins).Error; err != nil {
 			return err
 		}
-		keys := []string{}
 		for _, a := range audio {
-			keys = append(keys, a.FileKey)
+			if err := objectgc.Schedule(tx, objectstore.BucketPrivate, a.FileKey, 0); err != nil {
+				return err
+			}
 		}
 		for _, a := range origins {
-			keys = append(keys, a.FileKey)
+			if err := objectgc.Schedule(tx, objectstore.BucketPrivate, a.FileKey, 0); err != nil {
+				return err
+			}
 		}
 		if track.CoverKey != nil {
-			keys = append(keys, *track.CoverKey)
-		}
-		for _, k := range keys {
-			if err := objectgc.Schedule(tx, k, 0); err != nil {
+			if err := objectgc.Schedule(tx, objectstore.BucketPublic, *track.CoverKey, 0); err != nil {
 				return err
 			}
 		}

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"github.com/gin-gonic/gin"
 	"strconv"
 	"time"
 
@@ -36,7 +35,7 @@ type AliasRow struct {
 	Alias string `json:"alias"`
 }
 
-// AudioDTO 分发音频视图，含对外可访问地址。
+// AudioDTO 只暴露音频元数据；播放地址必须通过授权接口按需签发。
 type AudioDTO struct {
 	Source       *string  `json:"source,omitempty"`
 	ID           string   `json:"id"`
@@ -49,13 +48,11 @@ type AudioDTO struct {
 	Duration     int      `json:"duration"`
 	Size         int64    `json:"size"`
 	Loudness     *float64 `json:"loudness,omitempty"`
-	URL          string   `json:"url"`
 }
 
 // OriginDTO 原始音频视图（管理端可见）。
 type OriginDTO struct {
 	ID           string    `json:"id"`
-	FileKey      string    `json:"fileKey"`
 	Hash         string    `json:"hash"`
 	Format       string    `json:"format"`
 	Encoder      string    `json:"encoder"`
@@ -66,7 +63,6 @@ type OriginDTO struct {
 	SamplingRate int       `json:"samplingRate"`
 	BitDepth     int       `json:"bitDepth"`
 	ChannelCount int       `json:"channelCount"`
-	URL          string    `json:"url"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
@@ -115,7 +111,7 @@ func loadArtistsForTracks(db *gorm.DB, trackIDs []int64) map[int64][]ArtistDTO {
 }
 
 // buildTrackDTO 构建单个曲目的完整 DTO（别名/艺术家/专辑/语种，可选音频）。
-func buildTrackDTO(c *gin.Context, db *gorm.DB, store *objectstore.Store, t *model.Track, includeAudio bool) TrackDTO {
+func buildTrackDTO(db *gorm.DB, store *objectstore.Store, t *model.Track, includeAudio bool) TrackDTO {
 	dto := TrackDTO{
 		ID:        itoa(t.ID),
 		Title:     t.Title,
@@ -183,7 +179,7 @@ func buildTrackDTO(c *gin.Context, db *gorm.DB, store *objectstore.Store, t *mod
 		db.Where("track_id = ?", t.ID).Order("bitrate DESC").Find(&audios)
 		for _, au := range audios {
 			dto.Audios = append(dto.Audios, AudioDTO{
-				ID:           itoa(au.ID),
+				ID:           au.ID,
 				Source:       au.Source,
 				QualityLabel: au.QualityLabel,
 				Format:       au.Format,
@@ -194,7 +190,6 @@ func buildTrackDTO(c *gin.Context, db *gorm.DB, store *objectstore.Store, t *mod
 				Duration:     au.Duration,
 				Size:         au.Size,
 				Loudness:     au.Loudness,
-				URL:          mediaURL(c, "/api/v1/media/audio/"+itoa(au.ID)),
 			})
 		}
 	}
@@ -202,14 +197,13 @@ func buildTrackDTO(c *gin.Context, db *gorm.DB, store *objectstore.Store, t *mod
 }
 
 // buildOrigins 构建某曲目的原始音频列表（管理端）。
-func buildOrigins(c *gin.Context, db *gorm.DB, store *objectstore.Store, trackID int64) []OriginDTO {
+func buildOrigins(db *gorm.DB, trackID int64) []OriginDTO {
 	var origins []model.OriginAudio
 	db.Where("track_id = ?", trackID).Order("created_at DESC").Find(&origins)
 	out := make([]OriginDTO, 0, len(origins))
 	for _, o := range origins {
 		out = append(out, OriginDTO{
-			ID:           itoa(o.ID),
-			FileKey:      o.FileKey,
+			ID:           o.ID,
 			Hash:         o.Hash,
 			Format:       o.Format,
 			Encoder:      o.Encoder,
@@ -220,7 +214,6 @@ func buildOrigins(c *gin.Context, db *gorm.DB, store *objectstore.Store, trackID
 			SamplingRate: o.SamplingRate,
 			BitDepth:     o.BitDepth,
 			ChannelCount: o.ChannelCount,
-			URL:          mediaURL(c, "/api/v1/media/origin/"+itoa(o.ID)),
 			CreatedAt:    o.CreatedAt,
 		})
 	}
