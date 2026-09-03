@@ -61,7 +61,7 @@ Containerfile Caddyfile docker-entrypoint.sh docker-compose.yml
 首次开发时，在仓库根目录执行：
 
 ```bash
-cp .env.example .env        # 填入 DB / S3_*，JWT_SECRET 至少 32 字节
+cp .env.example .env        # 填入 DB / S3_PUBLIC_* / S3_PRIVATE_*，JWT_SECRET 至少 32 字节
 vp -C web install --frozen-lockfile
 ```
 
@@ -69,9 +69,10 @@ vp -C web install --frozen-lockfile
 已有 `.env` 也需要检查这一项；未设置或不足 32 字节时，后端会拒绝启动。
 密钥应持久保存，修改后需要重新登录。不要将 `.env` 提交到仓库。
 
-对象存储必须使用两个不同的桶：公共桶仅开放封面对象的匿名读取，私有桶不设匿名策略，
-音频播放与原始文件下载由 API 鉴权后按需签发 S3 临时 URL。应用 AK/SK 应只授予这两个桶所需的
-列举、读写和删除权限，不要使用 MinIO 管理员凭据。完整策略与切换步骤见
+对象存储使用两套完全独立的 S3 配置：公共桶仅开放封面对象的匿名读取，私有桶不设匿名策略，
+音频播放与原始文件下载由 API 鉴权后按需签发 S3 临时 URL。两个桶各自拥有 endpoint、AK/SK 与桶名，
+可位于不同服务商或账号；每套凭据只授予对应桶的列举、读写和删除权限，不要使用管理员凭据。
+服务启动时会分别自检两个桶，系统管理概览页展示两桶的脱敏状态。完整策略与切换步骤见
 [`docs/object-storage.md`](docs/object-storage.md)。
 
 之后只需一个命令，同时启动前后端：

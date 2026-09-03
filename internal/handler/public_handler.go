@@ -18,11 +18,11 @@ import (
 // PublicHandler 处理需 API Key 鉴权的开放接口。
 type PublicHandler struct {
 	db    *gorm.DB
-	store *objectstore.Store
+	store *objectstore.Public
 }
 
 // NewPublicHandler 创建开放接口处理器。
-func NewPublicHandler(db *gorm.DB, store *objectstore.Store) *PublicHandler {
+func NewPublicHandler(db *gorm.DB, store *objectstore.Public) *PublicHandler {
 	return &PublicHandler{db: db, store: store}
 }
 
@@ -125,7 +125,7 @@ func (h *PublicHandler) Search(c *gin.Context) {
 			dto.Artists = []ArtistDTO{}
 		}
 		if t.CoverKey != nil {
-			dto.CoverURL = h.store.PublicURL(*t.CoverKey)
+			dto.CoverURL = h.store.URL(*t.CoverKey)
 		}
 		out = append(out, dto)
 	}

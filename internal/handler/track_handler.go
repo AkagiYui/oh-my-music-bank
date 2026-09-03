@@ -19,11 +19,11 @@ import (
 // TrackHandler 处理管理员的曲目管理。
 type TrackHandler struct {
 	db    *gorm.DB
-	store *objectstore.Store
+	store *objectstore.Public
 }
 
 // NewTrackHandler 创建曲目处理器。
-func NewTrackHandler(db *gorm.DB, store *objectstore.Store) *TrackHandler {
+func NewTrackHandler(db *gorm.DB, store *objectstore.Public) *TrackHandler {
 	return &TrackHandler{db: db, store: store}
 }
 

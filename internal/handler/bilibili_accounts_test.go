@@ -20,6 +20,7 @@ import (
 	"github.com/akagiyui/oh-my-music-bank/internal/service/cache"
 	"github.com/akagiyui/oh-my-music-bank/internal/service/session"
 	storage "github.com/akagiyui/oh-my-music-bank/internal/storage/db"
+	"github.com/akagiyui/oh-my-music-bank/internal/storage/objectstore"
 	"github.com/gin-gonic/gin"
 	"github.com/pressly/goose/v3"
 )
@@ -239,8 +240,8 @@ func TestBilibiliLegacyMigrationAndPinnedJobs(t *testing.T) {
 		t.Fatal("legacy re-login did not upgrade in place")
 	}
 	// 任务提交时绑定默认账号，后续默认切换不会修改任务负载。
-	h := NewBilibiliHandler(db, nil, cache.New(db), bilibili.New())
-	jobs := NewJobs(db, nil, h, 1024)
+	h := NewBilibiliHandler(db, objectstore.Stores{}, cache.New(db), bilibili.New())
+	jobs := NewJobs(db, objectstore.Stores{}, h, 1024)
 	resp := call(t, func(c *gin.Context) { c.Set("user_id", user.ID); jobs.Bilibili(c) }, "POST", "/jobs", gin.H{"items": []BiliIngestRequest{{Bvid: "BVtest", Cid: 123}}}, nil)
 	if resp.Code != 202 {
 		t.Fatalf("job submit %d: %s", resp.Code, resp.Body.String())
@@ -285,7 +286,7 @@ func TestBilibiliMediaTokenPinsAccountAndHonorsDeletion(t *testing.T) {
 	mid := "123"
 	account := model.BilibiliAccount{ID: "account-a", MID: &mid, Name: "A", Cookie: "SESSDATA=unused", IsDefault: true, Status: "active", LastCheckedAt: &now}
 	must(t, db.Create(&account).Error)
-	h := NewBilibiliHandler(db, nil, cache.New(db), bilibili.New())
+	h := NewBilibiliHandler(db, objectstore.Stores{}, cache.New(db), bilibili.New())
 	r := call(t, func(c *gin.Context) {
 		c.Set("media_auth", cfg)
 		c.Set(middleware.CtxUserID, user.ID)
@@ -336,7 +337,7 @@ func TestBilibiliAccountHandlersRejectNonAdminsAndLegacyWrites(t *testing.T) {
 	cfg := testConfig()
 	access, _, err := session.New(db, cfg, &user)
 	must(t, err)
-	h := NewBilibiliHandler(db, nil, cache.New(db), bilibili.New())
+	h := NewBilibiliHandler(db, objectstore.Stores{}, cache.New(db), bilibili.New())
 	engine := gin.New()
 	group := engine.Group("/bilibili", middleware.WebAuthMiddleware(cfg, db), middleware.AdminOnly())
 	group.GET("/accounts", h.Accounts)

@@ -18,11 +18,11 @@ import (
 // AlbumHandler 处理管理员的专辑管理。
 type AlbumHandler struct {
 	db    *gorm.DB
-	store *objectstore.Store
+	store *objectstore.Public
 }
 
 // NewAlbumHandler 创建专辑处理器。
-func NewAlbumHandler(db *gorm.DB, store *objectstore.Store) *AlbumHandler {
+func NewAlbumHandler(db *gorm.DB, store *objectstore.Public) *AlbumHandler {
 	return &AlbumHandler{db: db, store: store}
 }
 
@@ -87,7 +87,7 @@ func (h *AlbumHandler) List(c *gin.Context) {
 	for _, a := range albums {
 		item := albumListItem{ID: itoa(a.ID), Title: a.Title, TrackCount: counts[a.ID]}
 		if a.CoverKey != nil {
-			item.CoverURL = h.store.PublicURL(*a.CoverKey)
+			item.CoverURL = h.store.URL(*a.CoverKey)
 		}
 		out = append(out, item)
 	}
@@ -108,7 +108,7 @@ func (h *AlbumHandler) Detail(c *gin.Context) {
 	dto := albumDetailDTO{ID: itoa(album.ID), Title: album.Title, Artists: []ArtistDTO{}, Tracks: []albumTrackBrief{}}
 	if album.CoverKey != nil {
 		dto.CoverKey = *album.CoverKey
-		dto.CoverURL = h.store.PublicURL(*album.CoverKey)
+		dto.CoverURL = h.store.URL(*album.CoverKey)
 	}
 
 	var artists []struct {

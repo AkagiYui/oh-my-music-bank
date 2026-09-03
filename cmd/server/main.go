@@ -50,6 +50,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化对象存储失败: %v", err)
 	}
+	// 启动时分别确认公共桶与私有桶可达，配置错误立即失败而不是等到首次上传。
+	checkCtx, cancelCheck := context.WithTimeout(context.Background(), 20*time.Second)
+	if err := store.Check(checkCtx); err != nil {
+		log.Fatalf("对象存储自检失败: %v", err)
+	}
+	cancelCheck()
+	log.Printf("对象存储就绪: 公共桶 %s/%s，私有桶 %s/%s", store.Public.Info().Endpoint, store.Public.Info().Bucket, store.Private.Info().Endpoint, store.Private.Info().Bucket)
 
 	biliClient := bilibili.New()
 	jobs := handler.NewJobs(dbConn, store, handler.NewBilibiliHandler(dbConn, store, cacheMgr, biliClient), int64(cfg.Upload.MaxSizeMB)<<20)

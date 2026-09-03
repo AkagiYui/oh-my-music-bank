@@ -37,7 +37,7 @@ type ingestOptions struct {
 
 // ingestAudioFile 把本地音频文件落库并上传对象存储，返回曲目（或去重命中的曲目）。
 // 解析标题/艺术家/时长/响度等元信息；尽量保留原始编码（不转码）。
-func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store, filePath, ext string, opts ingestOptions) (*model.Track, bool, error) {
+func ingestAudioFile(ctx context.Context, db *gorm.DB, store objectstore.Stores, filePath, ext string, opts ingestOptions) (*model.Track, bool, error) {
 	// 计算哈希。
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -87,7 +87,7 @@ func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store,
 	if err != nil {
 		return nil, false, err
 	}
-	if err := store.Put(ctx, objectstore.BucketPrivate, fileKey, up, size, mime.TypeByExtension("."+ext)); err != nil {
+	if err := store.Private.Put(ctx, fileKey, up, size, mime.TypeByExtension("."+ext)); err != nil {
 		up.Close()
 		return nil, false, fmt.Errorf("上传对象存储失败: %w", err)
 	}
@@ -107,12 +107,12 @@ func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store,
 			if err := objectgc.Schedule(db, objectstore.BucketPublic, coverKey, 24*time.Hour); err != nil {
 				return nil, false, err
 			}
-			if err := store.Put(ctx, objectstore.BucketPublic, coverKey, bytes.NewReader(meta.CoverData), int64(len(meta.CoverData)), meta.CoverMime); err != nil {
+			if err := store.Public.Put(ctx, coverKey, bytes.NewReader(meta.CoverData), int64(len(meta.CoverData)), meta.CoverMime); err != nil {
 				return nil, false, err
 			}
 		} else if opts.CoverURL != "" {
 			var e error
-			coverKey, e = downloadCover(ctx, db, store, opts.CoverURL)
+			coverKey, e = downloadCover(ctx, db, store.Public, opts.CoverURL)
 			if e != nil {
 				return nil, false, e
 			}
@@ -214,7 +214,7 @@ func ingestAudioFile(ctx context.Context, db *gorm.DB, store *objectstore.Store,
 }
 
 // downloadCover 下载远程封面到对象存储，返回 key。
-func downloadCover(ctx context.Context, db *gorm.DB, store *objectstore.Store, coverURL string) (string, error) {
+func downloadCover(ctx context.Context, db *gorm.DB, store *objectstore.Public, coverURL string) (string, error) {
 	if err := safefetch.ValidateURL(coverURL); err != nil {
 		return "", err
 	}
@@ -250,7 +250,7 @@ func downloadCover(ctx context.Context, db *gorm.DB, store *objectstore.Store, c
 	if err := objectgc.Schedule(db, objectstore.BucketPublic, key, 24*time.Hour); err != nil {
 		return "", err
 	}
-	if err := store.Put(ctx, objectstore.BucketPublic, key, bytes.NewReader(data), int64(len(data)), mime); err != nil {
+	if err := store.Put(ctx, key, bytes.NewReader(data), int64(len(data)), mime); err != nil {
 		return "", err
 	}
 	return key, nil

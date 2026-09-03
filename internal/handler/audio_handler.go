@@ -23,7 +23,7 @@ import (
 // AudioHandler 处理管理员上传与音频管理。
 type AudioHandler struct {
 	db    *gorm.DB
-	store *objectstore.Store
+	store objectstore.Stores
 	cfg   config.Upload
 }
 
@@ -33,7 +33,7 @@ type presignedURLDTO struct {
 }
 
 // NewAudioHandler 创建音频处理器。
-func NewAudioHandler(db *gorm.DB, store *objectstore.Store, cfg config.Upload) *AudioHandler {
+func NewAudioHandler(db *gorm.DB, store objectstore.Stores, cfg config.Upload) *AudioHandler {
 	return &AudioHandler{db: db, store: store, cfg: cfg}
 }
 
@@ -89,7 +89,7 @@ func (h *AudioHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	dto := buildTrackDTO(h.db, h.store, track, true)
+	dto := buildTrackDTO(h.db, h.store.Public, track, true)
 	if dedup {
 		response.Success(c, gin.H{"deduplicated": true, "track": dto})
 		return
@@ -170,7 +170,7 @@ func (h *AudioHandler) OriginDownloadURL(c *gin.Context) {
 	}) >= 0 {
 		format = "bin"
 	}
-	url, expiresAt, err := h.store.PresignedPrivateDownload(c.Request.Context(), origin.FileKey, origin.ID+"."+format)
+	url, expiresAt, err := h.store.Private.PresignedDownload(c.Request.Context(), origin.FileKey, origin.ID+"."+format)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, pkgerrors.Internal("failed to sign media URL"))
 		return
@@ -179,7 +179,7 @@ func (h *AudioHandler) OriginDownloadURL(c *gin.Context) {
 }
 
 func (h *AudioHandler) respondPresignedURL(c *gin.Context, key string) {
-	url, expiresAt, err := h.store.PresignedPrivateGet(c.Request.Context(), key)
+	url, expiresAt, err := h.store.Private.PresignedGet(c.Request.Context(), key)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, pkgerrors.Internal("failed to sign media URL"))
 		return

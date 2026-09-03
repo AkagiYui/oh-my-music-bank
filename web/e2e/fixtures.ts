@@ -168,6 +168,29 @@ export async function mockApp(page: Page, loggedIn = true) {
           newUsersToday: 1,
         },
       };
+    else if (path.endsWith('/admin/storage'))
+      response = {
+        data: {
+          public: {
+            kind: 'public',
+            endpoint: 'public.s3.example.test',
+            bucket: 'ommb-public',
+            region: '',
+            baseUrl: 'https://cdn.example.test',
+            reachable: true,
+          },
+          private: {
+            kind: 'private',
+            endpoint: 'private.s3.example.test',
+            bucket: 'ommb-private',
+            region: 'us-east-1',
+            presignTtlSeconds: 1800,
+            reachable: false,
+            error: 'bucket "ommb-private" not found',
+          },
+          checkedAt: '2026-09-03T00:00:00Z',
+        },
+      };
     else if (path.endsWith('/stats/timeseries'))
       response = { data: [{ date: '2026-08-31', requests: 5, registrations: 2 }] };
     else if (path.endsWith('/bilibili/status')) response = { data: { configured: true, defaultAccountId: 'bili-1' } };

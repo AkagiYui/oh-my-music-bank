@@ -24,17 +24,26 @@ auth:
   access_token_ttl: "48h"
   refresh_token_ttl: "168h"
 
-# S3 兼容对象存储。公共桶仅承载可匿名读取的封面，私有桶承载所有媒体文件。
+# S3 兼容对象存储：公共桶与私有桶是两套完全独立的连接，各自配置 endpoint、凭据与桶名，
+# 可以位于不同的服务商或账号。同一 endpoint 下不允许两者使用同一个桶。
 storage:
-  endpoint: "https://cn-nb1.rains3.com"
-  access_key: ""
-  secret_key: ""
-  public_bucket: ""
-  private_bucket: ""
-  region: ""
-  # 公共桶或 CDN 的访问前缀，如 https://<bucket>.cn-nb1.rains3.com
-  public_base_url: ""
-  presigned_url_ttl: "30m"
+  # 公共桶仅承载可匿名读取的封面与头像。
+  public:
+    endpoint: "https://cn-nb1.rains3.com"
+    access_key: ""
+    secret_key: ""
+    bucket: ""
+    region: ""
+    # 公共桶或 CDN 的 HTTPS 访问前缀，如 https://<bucket>.cn-nb1.rains3.com
+    base_url: ""
+  # 私有桶承载音频、原始文件与暂存文件，只通过预签名 URL 访问。
+  private:
+    endpoint: "https://cn-nb1.rains3.com"
+    access_key: ""
+    secret_key: ""
+    bucket: ""
+    region: ""
+    presigned_url_ttl: "30m"
 
 upload:
   max_size_mb: 200

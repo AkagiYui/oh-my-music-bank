@@ -19,11 +19,11 @@ import (
 // ArtistHandler 处理管理员的艺术家管理。
 type ArtistHandler struct {
 	db    *gorm.DB
-	store *objectstore.Store
+	store *objectstore.Public
 }
 
 // NewArtistHandler 创建艺术家处理器。
-func NewArtistHandler(db *gorm.DB, store *objectstore.Store) *ArtistHandler {
+func NewArtistHandler(db *gorm.DB, store *objectstore.Public) *ArtistHandler {
 	return &ArtistHandler{db: db, store: store}
 }
 
@@ -87,7 +87,7 @@ func (h *ArtistHandler) List(c *gin.Context) {
 	for _, a := range artists {
 		item := artistListItem{ID: itoa(a.ID), Name: a.Name, TrackCount: counts[a.ID]}
 		if a.AvatarKey != nil {
-			item.AvatarURL = h.store.PublicURL(*a.AvatarKey)
+			item.AvatarURL = h.store.URL(*a.AvatarKey)
 		}
 		out = append(out, item)
 	}
@@ -103,7 +103,7 @@ func (h *ArtistHandler) Detail(c *gin.Context) {
 	dto := artistDetailDTO{ID: itoa(a.ID), Name: a.Name, Aliases: []artistAliasDTO{}, Albums: []AlbumDTO{}}
 	if a.AvatarKey != nil {
 		dto.AvatarKey = *a.AvatarKey
-		dto.AvatarURL = h.store.PublicURL(*a.AvatarKey)
+		dto.AvatarURL = h.store.URL(*a.AvatarKey)
 	}
 
 	var aliases []model.ArtistAlias
@@ -122,7 +122,7 @@ func (h *ArtistHandler) Detail(c *gin.Context) {
 	for _, al := range albums {
 		item := AlbumDTO{ID: itoa(al.ID), Title: al.Title}
 		if al.CoverKey != nil {
-			item.CoverURL = h.store.PublicURL(*al.CoverKey)
+			item.CoverURL = h.store.URL(*al.CoverKey)
 		}
 		dto.Albums = append(dto.Albums, item)
 	}

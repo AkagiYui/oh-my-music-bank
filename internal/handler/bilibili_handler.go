@@ -28,7 +28,7 @@ import (
 // BilibiliHandler 处理从哔哩哔哩收藏夹导入音频、裁剪、听歌识曲。
 type BilibiliHandler struct {
 	db       *gorm.DB
-	store    *objectstore.Store
+	store    objectstore.Stores
 	cache    *cache.Manager
 	bili     *bilibili.Client
 	accounts *bilibili.Accounts
@@ -43,7 +43,7 @@ type cachedURL struct {
 }
 
 // NewBilibiliHandler 创建处理器。
-func NewBilibiliHandler(db *gorm.DB, store *objectstore.Store, c *cache.Manager, client *bilibili.Client) *BilibiliHandler {
+func NewBilibiliHandler(db *gorm.DB, store objectstore.Stores, c *cache.Manager, client *bilibili.Client) *BilibiliHandler {
 	return &BilibiliHandler{db: db, store: store, cache: c, bili: client, accounts: bilibili.NewAccounts(db, client), urlCache: map[string]cachedURL{}}
 }
 
@@ -274,7 +274,7 @@ func (h *BilibiliHandler) Ingest(c *gin.Context) {
 		c.JSON(422, pkgerrors.BadRequest(err.Error()))
 		return
 	}
-	response.Success(c, gin.H{"track": buildTrackDTO(h.db, h.store, track, true), "deduplicated": dedup})
+	response.Success(c, gin.H{"track": buildTrackDTO(h.db, h.store.Public, track, true), "deduplicated": dedup})
 }
 
 func (h *BilibiliHandler) Recognize(c *gin.Context) {

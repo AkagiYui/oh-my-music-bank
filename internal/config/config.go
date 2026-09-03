@@ -1,7 +1,7 @@
 // Package config 负责加载和解析应用配置。
 //
 // 配置来源优先级：环境变量 > config.yaml > 内置默认值。
-// 显式绑定 DB / S3_* 等环境变量名，
+// 显式绑定 DB / S3_PUBLIC_* / S3_PRIVATE_* 等环境变量名，
 // 同时也接受 OMMB_ 前缀的结构化覆盖（如 OMMB_SERVER_PORT）。
 package config
 
@@ -55,16 +55,31 @@ type Auth struct {
 	RefreshTokenTTL string `mapstructure:"refresh_token_ttl"`
 }
 
-// Storage S3 兼容对象存储配置。
+// S3 单个 S3 兼容桶的连接配置。公共桶与私有桶各自独立持有一套，互不共享。
+type S3 struct {
+	Endpoint  string `mapstructure:"endpoint"`   // 如 https://cn-nb1.rains3.com，可带或不带协议
+	AccessKey string `mapstructure:"access_key"` // 仅对该桶授权的最小权限 Access Key
+	SecretKey string `mapstructure:"secret_key"` // 仅对该桶授权的最小权限 Secret Key
+	Bucket    string `mapstructure:"bucket"`     // 桶名
+	Region    string `mapstructure:"region"`     // 多数 S3 兼容服务可留空
+}
+
+// PublicStorage 公开静态资源桶（封面、头像），对象允许匿名读取。
+type PublicStorage struct {
+	S3      `mapstructure:",squash"`
+	BaseURL string `mapstructure:"base_url"` // 公开桶或 CDN 的 HTTPS 访问前缀
+}
+
+// PrivateStorage 私有媒体桶（音频、原始文件、暂存文件），只通过预签名 URL 访问。
+type PrivateStorage struct {
+	S3              `mapstructure:",squash"`
+	PresignedURLTTL string `mapstructure:"presigned_url_ttl"` // 临时 URL 有效期
+}
+
+// Storage 对象存储配置：公共桶与私有桶是两套完全独立的 S3 连接。
 type Storage struct {
-	Endpoint        string `mapstructure:"endpoint"`          // 如 https://cn-nb1.rains3.com
-	AccessKey       string `mapstructure:"access_key"`        // 应用专用的最小权限 Access Key
-	SecretKey       string `mapstructure:"secret_key"`        // 应用专用的最小权限 Secret Key
-	PublicBucket    string `mapstructure:"public_bucket"`     // 封面等公开静态资源桶
-	PrivateBucket   string `mapstructure:"private_bucket"`    // 音频、原始文件与暂存文件桶
-	Region          string `mapstructure:"region"`            // 多数 S3 兼容服务可留空
-	PublicBaseURL   string `mapstructure:"public_base_url"`   // 公开桶或 CDN 的访问前缀
-	PresignedURLTTL string `mapstructure:"presigned_url_ttl"` // 私有对象临时 URL 有效期
+	Public  PublicStorage  `mapstructure:"public"`
+	Private PrivateStorage `mapstructure:"private"`
 }
 
 // Upload 上传相关限制。
@@ -91,44 +106,56 @@ func (a Auth) RefreshTokenDuration() (time.Duration, error) {
 	return parseDuration("auth.refresh_token_ttl", a.RefreshTokenTTL)
 }
 
-// PublicURL 拼出对象 key 的对外访问地址。
-func (s Storage) PublicURL(key string) string {
+// PublicURL 拼出公共桶对象 key 的对外访问地址。
+func (p PublicStorage) PublicURL(key string) string {
 	if key == "" {
 		return ""
 	}
-	prefix := strings.TrimRight(s.PublicBaseURL, "/")
+	prefix := strings.TrimRight(p.BaseURL, "/")
 	return prefix + "/" + strings.TrimLeft(key, "/")
 }
 
 // PresignedURLDuration 解析私有对象临时 URL 的有效期。
-func (s Storage) PresignedURLDuration() (time.Duration, error) {
-	return parseDuration("storage.presigned_url_ttl", s.PresignedURLTTL)
+func (p PrivateStorage) PresignedURLDuration() (time.Duration, error) {
+	return parseDuration("storage.private.presigned_url_ttl", p.PresignedURLTTL)
+}
+
+// EndpointHost 返回去掉协议与路径后的 endpoint 主机，用于日志与状态展示。
+func (b S3) EndpointHost() string {
+	if u, err := url.Parse(b.Endpoint); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return strings.TrimPrefix(strings.TrimPrefix(b.Endpoint, "https://"), "http://")
 }
 
 // envBindings 将结构化配置键映射到可接受的环境变量名（首个命中者生效）。
 var envBindings = map[string][]string{
-	"server.host":                      {"OMMB_SERVER_HOST", "SERVER_HOST"},
-	"server.port":                      {"OMMB_SERVER_PORT", "SERVER_PORT"},
-	"server.socket":                    {"OMMB_SERVER_SOCKET", "SERVER_SOCKET"},
-	"server.debug":                     {"OMMB_SERVER_DEBUG", "SERVER_DEBUG"},
-	"database.dsn":                     {"OMMB_DATABASE_DSN", "DB", "DATABASE_DSN"},
-	"database.max_open_conns":          {"OMMB_DATABASE_MAX_OPEN_CONNS"},
-	"database.max_idle_conns":          {"OMMB_DATABASE_MAX_IDLE_CONNS"},
-	"database.conn_max_lifetime_secs":  {"OMMB_DATABASE_CONN_MAX_LIFETIME_SECS"},
-	"database.conn_max_idle_time_secs": {"OMMB_DATABASE_CONN_MAX_IDLE_TIME_SECS"},
-	"database.retry_max_attempts":      {"OMMB_DATABASE_RETRY_MAX_ATTEMPTS"},
-	"auth.jwt_secret":                  {"OMMB_AUTH_JWT_SECRET", "JWT_SECRET"},
-	"auth.access_token_ttl":            {"OMMB_AUTH_ACCESS_TOKEN_TTL"},
-	"auth.refresh_token_ttl":           {"OMMB_AUTH_REFRESH_TOKEN_TTL"},
-	"storage.endpoint":                 {"OMMB_STORAGE_ENDPOINT", "S3_ENDPOINT"},
-	"storage.access_key":               {"OMMB_STORAGE_ACCESS_KEY", "S3_ACCESS_KEY"},
-	"storage.secret_key":               {"OMMB_STORAGE_SECRET_KEY", "S3_SECRET_KEY"},
-	"storage.public_bucket":            {"OMMB_STORAGE_PUBLIC_BUCKET", "S3_PUBLIC_BUCKET"},
-	"storage.private_bucket":           {"OMMB_STORAGE_PRIVATE_BUCKET", "S3_PRIVATE_BUCKET"},
-	"storage.region":                   {"OMMB_STORAGE_REGION", "S3_REGION"},
-	"storage.public_base_url":          {"OMMB_STORAGE_PUBLIC_BASE_URL", "S3_PUBLIC_BASE_URL"},
-	"storage.presigned_url_ttl":        {"OMMB_STORAGE_PRESIGNED_URL_TTL"},
-	"upload.max_size_mb":               {"OMMB_UPLOAD_MAX_SIZE_MB"},
+	"server.host":                       {"OMMB_SERVER_HOST", "SERVER_HOST"},
+	"server.port":                       {"OMMB_SERVER_PORT", "SERVER_PORT"},
+	"server.socket":                     {"OMMB_SERVER_SOCKET", "SERVER_SOCKET"},
+	"server.debug":                      {"OMMB_SERVER_DEBUG", "SERVER_DEBUG"},
+	"database.dsn":                      {"OMMB_DATABASE_DSN", "DB", "DATABASE_DSN"},
+	"database.max_open_conns":           {"OMMB_DATABASE_MAX_OPEN_CONNS"},
+	"database.max_idle_conns":           {"OMMB_DATABASE_MAX_IDLE_CONNS"},
+	"database.conn_max_lifetime_secs":   {"OMMB_DATABASE_CONN_MAX_LIFETIME_SECS"},
+	"database.conn_max_idle_time_secs":  {"OMMB_DATABASE_CONN_MAX_IDLE_TIME_SECS"},
+	"database.retry_max_attempts":       {"OMMB_DATABASE_RETRY_MAX_ATTEMPTS"},
+	"auth.jwt_secret":                   {"OMMB_AUTH_JWT_SECRET", "JWT_SECRET"},
+	"auth.access_token_ttl":             {"OMMB_AUTH_ACCESS_TOKEN_TTL"},
+	"auth.refresh_token_ttl":            {"OMMB_AUTH_REFRESH_TOKEN_TTL"},
+	"storage.public.endpoint":           {"OMMB_STORAGE_PUBLIC_ENDPOINT", "S3_PUBLIC_ENDPOINT"},
+	"storage.public.access_key":         {"OMMB_STORAGE_PUBLIC_ACCESS_KEY", "S3_PUBLIC_ACCESS_KEY"},
+	"storage.public.secret_key":         {"OMMB_STORAGE_PUBLIC_SECRET_KEY", "S3_PUBLIC_SECRET_KEY"},
+	"storage.public.bucket":             {"OMMB_STORAGE_PUBLIC_BUCKET", "S3_PUBLIC_BUCKET"},
+	"storage.public.region":             {"OMMB_STORAGE_PUBLIC_REGION", "S3_PUBLIC_REGION"},
+	"storage.public.base_url":           {"OMMB_STORAGE_PUBLIC_BASE_URL", "S3_PUBLIC_BASE_URL"},
+	"storage.private.endpoint":          {"OMMB_STORAGE_PRIVATE_ENDPOINT", "S3_PRIVATE_ENDPOINT"},
+	"storage.private.access_key":        {"OMMB_STORAGE_PRIVATE_ACCESS_KEY", "S3_PRIVATE_ACCESS_KEY"},
+	"storage.private.secret_key":        {"OMMB_STORAGE_PRIVATE_SECRET_KEY", "S3_PRIVATE_SECRET_KEY"},
+	"storage.private.bucket":            {"OMMB_STORAGE_PRIVATE_BUCKET", "S3_PRIVATE_BUCKET"},
+	"storage.private.region":            {"OMMB_STORAGE_PRIVATE_REGION", "S3_PRIVATE_REGION"},
+	"storage.private.presigned_url_ttl": {"OMMB_STORAGE_PRIVATE_PRESIGNED_URL_TTL", "S3_PRIVATE_PRESIGNED_URL_TTL"},
+	"upload.max_size_mb":                {"OMMB_UPLOAD_MAX_SIZE_MB"},
 }
 
 // Load 从配置文件和环境变量加载应用配置。
@@ -159,27 +186,44 @@ func Load(configPath string) (*Config, error) {
 }
 
 func validateStorage(cfg Storage) error {
-	for name, value := range map[string]string{
-		"endpoint": cfg.Endpoint, "access_key": cfg.AccessKey, "secret_key": cfg.SecretKey,
-		"public_bucket": cfg.PublicBucket, "private_bucket": cfg.PrivateBucket, "public_base_url": cfg.PublicBaseURL,
-	} {
-		if strings.TrimSpace(value) == "" {
-			return fmt.Errorf("storage.%s is required", name)
-		}
+	if err := validateS3("storage.public", cfg.Public.S3); err != nil {
+		return err
 	}
-	if cfg.PublicBucket == cfg.PrivateBucket {
-		return fmt.Errorf("storage.public_bucket and storage.private_bucket must be different")
+	if err := validateS3("storage.private", cfg.Private.S3); err != nil {
+		return err
 	}
-	u, err := url.Parse(cfg.PublicBaseURL)
+	// 两套配置必须指向不同的物理桶：同一 endpoint 下不允许复用桶名。
+	if strings.EqualFold(cfg.Public.EndpointHost(), cfg.Private.EndpointHost()) && cfg.Public.Bucket == cfg.Private.Bucket {
+		return fmt.Errorf("storage.public and storage.private must not point to the same bucket")
+	}
+	if strings.TrimSpace(cfg.Public.BaseURL) == "" {
+		return fmt.Errorf("storage.public.base_url is required")
+	}
+	u, err := url.Parse(cfg.Public.BaseURL)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
-		return fmt.Errorf("storage.public_base_url must be an absolute HTTPS URL without query or fragment")
+		return fmt.Errorf("storage.public.base_url must be an absolute HTTPS URL without query or fragment")
 	}
-	ttl, err := cfg.PresignedURLDuration()
+	ttl, err := cfg.Private.PresignedURLDuration()
 	if err != nil {
 		return err
 	}
 	if ttl < time.Minute || ttl > 7*24*time.Hour {
-		return fmt.Errorf("storage.presigned_url_ttl must be between 1m and 168h")
+		return fmt.Errorf("storage.private.presigned_url_ttl must be between 1m and 168h")
+	}
+	return nil
+}
+
+// validateS3 校验单个桶的必填字段与 endpoint 格式。
+func validateS3(prefix string, cfg S3) error {
+	for _, f := range []struct{ name, value string }{
+		{"endpoint", cfg.Endpoint}, {"access_key", cfg.AccessKey}, {"secret_key", cfg.SecretKey}, {"bucket", cfg.Bucket},
+	} {
+		if strings.TrimSpace(f.value) == "" {
+			return fmt.Errorf("%s.%s is required", prefix, f.name)
+		}
+	}
+	if cfg.EndpointHost() == "" {
+		return fmt.Errorf("%s.endpoint must contain a host", prefix)
 	}
 	return nil
 }
@@ -252,7 +296,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.access_token_ttl", defaultAccessTokenTTL)
 	v.SetDefault("auth.refresh_token_ttl", defaultRefreshTokenTTL)
 	v.SetDefault("upload.max_size_mb", defaultUploadMaxSizeMB)
-	v.SetDefault("storage.presigned_url_ttl", "30m")
+	v.SetDefault("storage.private.presigned_url_ttl", "30m")
 }
 
 // parseDuration 解析时间字符串，额外支持 "d"（天）单位。

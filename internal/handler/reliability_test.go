@@ -168,38 +168,55 @@ func TestConcurrentAdministratorBootstrap(t *testing.T) {
 		t.Fatal("last admin disabled")
 	}
 }
-func fakeStore(t *testing.T) (*objectstore.Store, *sync.Map) {
+
+// fakeStore 用两个独立的 httptest 服务模拟公共桶与私有桶，验证两套连接互不共享。
+func fakeStore(t *testing.T) (objectstore.Stores, *sync.Map) {
 	objects := &sync.Map{}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		key := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/private/"), "/public/")
-		switch r.Method {
-		case "PUT":
-			b, _ := io.ReadAll(r.Body)
-			objects.Store(key, b)
-			w.Header().Set("ETag", "\"test\"")
-		case "DELETE":
-			objects.Delete(key)
-			w.WriteHeader(204)
-		case "GET", "HEAD":
-			v, ok := objects.Load(key)
-			if !ok {
-				w.WriteHeader(404)
+	newServer := func(bucket string) *httptest.Server {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// 桶名之外的路径即对象 key；BucketExists 会 HEAD 桶根路径。
+			if r.URL.Path == "/"+bucket || r.URL.Path == "/"+bucket+"/" {
+				w.WriteHeader(200)
 				return
 			}
-			w.Header().Set("Content-Type", "audio/wav")
-			w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
-			http.ServeContent(w, r, key, time.Now(), bytes.NewReader(v.([]byte)))
-		default:
-			w.WriteHeader(400)
-		}
-	}))
-	t.Cleanup(server.Close)
+			key := strings.TrimPrefix(r.URL.Path, "/"+bucket+"/")
+			switch r.Method {
+			case "PUT":
+				b, _ := io.ReadAll(r.Body)
+				objects.Store(key, b)
+				w.Header().Set("ETag", "\"test\"")
+			case "DELETE":
+				objects.Delete(key)
+				w.WriteHeader(204)
+			case "GET", "HEAD":
+				v, ok := objects.Load(key)
+				if !ok {
+					w.WriteHeader(404)
+					return
+				}
+				w.Header().Set("Content-Type", "audio/wav")
+				w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
+				http.ServeContent(w, r, key, time.Now(), bytes.NewReader(v.([]byte)))
+			default:
+				w.WriteHeader(400)
+			}
+		}))
+		t.Cleanup(server.Close)
+		return server
+	}
+	pub, priv := newServer("public"), newServer("private")
 	store, e := objectstore.New(config.Storage{
-		Endpoint: server.URL, AccessKey: "test", SecretKey: "test-only",
-		PublicBucket: "public", PrivateBucket: "private", Region: "us-east-1",
-		PublicBaseURL: server.URL + "/public", PresignedURLTTL: "30m",
+		Public: config.PublicStorage{
+			S3:      config.S3{Endpoint: pub.URL, AccessKey: "public-test", SecretKey: "public-only", Bucket: "public", Region: "us-east-1"},
+			BaseURL: pub.URL + "/public",
+		},
+		Private: config.PrivateStorage{
+			S3:              config.S3{Endpoint: priv.URL, AccessKey: "private-test", SecretKey: "private-only", Bucket: "private", Region: "us-east-1"},
+			PresignedURLTTL: "30m",
+		},
 	})
 	must(t, e)
+	must(t, store.Check(context.Background()))
 	return store, objects
 }
 func testWAV(t *testing.T) string {
@@ -261,7 +278,7 @@ func TestConcurrentDedupAndSharedObjectDeletion(t *testing.T) {
 	}
 	var origin model.OriginAudio
 	must(t, db.Where("track_id = ?", a).First(&origin).Error)
-	r = call(t, NewTrackHandler(db, store).Delete, "DELETE", "/", nil, gin.Params{{Key: "id", Value: itoa(a)}})
+	r = call(t, NewTrackHandler(db, store.Public).Delete, "DELETE", "/", nil, gin.Params{{Key: "id", Value: itoa(a)}})
 	if r.Code != 204 {
 		t.Fatal(r.Body.String())
 	}
@@ -279,11 +296,11 @@ func TestMetadataAtomicAndSearchAlias(t *testing.T) {
 	must(t, db.Create(&artist).Error)
 	must(t, db.Create(&model.ArtistAlias{ArtistID: 101, Alias: "别名测试"}).Error)
 	must(t, db.Create(&model.TrackArtist{TrackID: 100, ArtistID: 101}).Error)
-	r := call(t, NewPublicHandler(db, store).Search, "GET", "/?q="+url.QueryEscape("别名测试"), nil, nil)
+	r := call(t, NewPublicHandler(db, store.Public).Search, "GET", "/?q="+url.QueryEscape("别名测试"), nil, nil)
 	if r.Code != 200 || !strings.Contains(r.Body.String(), "Original") {
 		t.Fatalf("alias search: %s", r.Body.String())
 	}
-	r = call(t, NewMetadataHandler(db, store).Enrich, "POST", "/", map[string]any{"title": "Changed", "artists": []string{strings.Repeat("x", 300)}}, gin.Params{{Key: "id", Value: "100"}})
+	r = call(t, NewMetadataHandler(db, store.Public).Enrich, "POST", "/", map[string]any{"title": "Changed", "artists": []string{strings.Repeat("x", 300)}}, gin.Params{{Key: "id", Value: "100"}})
 	if r.Code != 422 {
 		t.Fatalf("enrich %d: %s", r.Code, r.Body.String())
 	}
@@ -328,7 +345,7 @@ func TestMergePreservesVersionsAndRelationships(t *testing.T) {
 		must(t, db.Create(&track).Error)
 		must(t, db.Create(&model.Audio{TrackID: id, FileKey: fmt.Sprint(id), QualityLabel: "standard"}).Error)
 	}
-	r := call(t, NewTrackHandler(db, store).Merge, "POST", "/", map[string]string{"targetId": "202"}, gin.Params{{Key: "id", Value: "201"}})
+	r := call(t, NewTrackHandler(db, store.Public).Merge, "POST", "/", map[string]string{"targetId": "202"}, gin.Params{{Key: "id", Value: "201"}})
 	if r.Code != 200 {
 		t.Fatalf("merge %d: %s", r.Code, r.Body.String())
 	}
@@ -346,7 +363,7 @@ func TestMergePreservesVersionsAndRelationships(t *testing.T) {
 		must(t, db.Create(&a).Error)
 		must(t, db.Create(&model.TrackArtist{TrackID: 202, ArtistID: id}).Error)
 	}
-	r = call(t, NewArtistHandler(db, store).Merge, "POST", "/", map[string]string{"targetId": "302"}, gin.Params{{Key: "id", Value: "301"}})
+	r = call(t, NewArtistHandler(db, store.Public).Merge, "POST", "/", map[string]string{"targetId": "302"}, gin.Params{{Key: "id", Value: "301"}})
 	if r.Code != 200 {
 		t.Fatal(r.Body.String())
 	}

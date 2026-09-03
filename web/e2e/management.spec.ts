@@ -14,6 +14,16 @@ test('曲库和系统管理独立导航、统计与页面标题', async ({ page 
   const app = await mockApp(page);
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: '概览', exact: true })).toBeVisible();
+  // 两套对象存储各自独立展示，且响应中不含凭据。
+  const publicCard = page.getByTestId('storage-public');
+  await expect(publicCard).toContainText('public.s3.example.test');
+  await expect(publicCard).toContainText('https://cdn.example.test');
+  await expect(publicCard.getByText('可用')).toBeVisible();
+  const privateCard = page.getByTestId('storage-private');
+  await expect(privateCard).toContainText('private.s3.example.test');
+  await expect(privateCard).toContainText('30 分钟');
+  await expect(privateCard.getByText('不可用')).toBeVisible();
+  await expect(privateCard).toContainText('not found');
   const systemNav = page.getByRole('navigation', { name: '系统管理', exact: true });
   await expect(systemNav.getByRole('link')).toHaveText(['概览', 'API Key', '调用日志', '用户', '站点设置', '集成']);
   await expect(page.getByRole('main').getByText('分发音频', { exact: true })).toHaveCount(0);

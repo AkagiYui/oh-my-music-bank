@@ -283,6 +283,22 @@ export interface StatsOverview {
   requestsToday: number;
   newUsersToday: number;
 }
+/** 单个对象存储桶的脱敏状态；后端不会返回任何凭据。 */
+export interface BucketStatus {
+  kind: 'public' | 'private';
+  endpoint: string;
+  bucket: string;
+  region: string;
+  baseUrl?: string;
+  presignTtlSeconds?: number;
+  reachable: boolean;
+  error?: string;
+}
+export interface StorageStatus {
+  public: BucketStatus;
+  private: BucketStatus;
+  checkedAt: string;
+}
 export interface TimeseriesPoint {
   date: string;
   requests: number;
@@ -425,6 +441,9 @@ export const api = {
       overview: (): Promise<StatsOverview> => request('/api/v1/admin/stats/overview', {}, true).then((r) => r.data),
       timeseries: (days = 30): Promise<TimeseriesPoint[]> =>
         request(`/api/v1/admin/stats/timeseries?days=${days}`, {}, true).then((r) => r.data),
+    },
+    storage: {
+      status: (): Promise<StorageStatus> => request('/api/v1/admin/storage', {}, true).then((r) => r.data),
     },
     logs: {
       list: (

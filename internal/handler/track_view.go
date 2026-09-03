@@ -111,7 +111,7 @@ func loadArtistsForTracks(db *gorm.DB, trackIDs []int64) map[int64][]ArtistDTO {
 }
 
 // buildTrackDTO 构建单个曲目的完整 DTO（别名/艺术家/专辑/语种，可选音频）。
-func buildTrackDTO(db *gorm.DB, store *objectstore.Store, t *model.Track, includeAudio bool) TrackDTO {
+func buildTrackDTO(db *gorm.DB, store *objectstore.Public, t *model.Track, includeAudio bool) TrackDTO {
 	dto := TrackDTO{
 		ID:        itoa(t.ID),
 		Title:     t.Title,
@@ -121,7 +121,7 @@ func buildTrackDTO(db *gorm.DB, store *objectstore.Store, t *model.Track, includ
 		Artists:   []ArtistDTO{},
 	}
 	if t.CoverKey != nil {
-		dto.CoverURL = store.PublicURL(*t.CoverKey)
+		dto.CoverURL = store.URL(*t.CoverKey)
 	}
 	if t.LiveID != nil {
 		dto.LiveID = itoa(*t.LiveID)
@@ -156,7 +156,7 @@ func buildTrackDTO(db *gorm.DB, store *objectstore.Store, t *model.Track, includ
 	for _, al := range albums {
 		a := AlbumDTO{ID: itoa(al.ID), Title: al.Title}
 		if al.CoverKey != nil {
-			a.CoverURL = store.PublicURL(*al.CoverKey)
+			a.CoverURL = store.URL(*al.CoverKey)
 		}
 		dto.Albums = append(dto.Albums, a)
 	}

@@ -1,7 +1,8 @@
 import { Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
-import { api, type TimeseriesPoint } from '../lib/api';
+import { api, type BucketStatus, type TimeseriesPoint } from '../lib/api';
+import { Badge } from '../components/ui/badge';
 import { StatCard } from '../components/StatCard';
 import { Card, CardContent } from '../components/ui/card';
 export const Route = createFileRoute('/admin/')({
@@ -29,7 +30,52 @@ function BarChart(props: { data: TimeseriesPoint[]; field: 'requests' | 'registr
     </svg>
   );
 }
+/** 两套对象存储各自展示一张卡片，凭据不会出现在响应里，只显示 endpoint 与桶名。 */
+function BucketCard({ title, desc, status }: { title: string; desc: string; status: BucketStatus | undefined }) {
+  const rows: [string, string | undefined][] = [
+    ['Endpoint', status?.endpoint],
+    ['桶', status?.bucket],
+    ['Region', status?.region || '—'],
+  ];
+  if (status?.kind === 'public') rows.push(['访问前缀', status.baseUrl]);
+  if (status?.kind === 'private')
+    rows.push([
+      '临时地址有效期',
+      status.presignTtlSeconds ? `${Math.round(status.presignTtlSeconds / 60)} 分钟` : undefined,
+    ]);
+  return (
+    <Card data-testid={`storage-${status?.kind ?? 'loading'}`}>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="text-sm font-medium">{title}</div>
+            <div className="text-xs text-muted-foreground">{desc}</div>
+          </div>
+          {status && (
+            <Badge variant={status.reachable ? 'outline' : 'destructive'}>{status.reachable ? '可用' : '不可用'}</Badge>
+          )}
+        </div>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+          {rows.map(([label, value]) => (
+            <Fragment key={label}>
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="truncate font-mono" title={value}>
+                {value ?? '—'}
+              </dd>
+            </Fragment>
+          ))}
+        </dl>
+        {status?.error && <div className="text-xs text-destructive break-all">{status.error}</div>}
+      </CardContent>
+    </Card>
+  );
+}
 function Overview() {
+  const { data: storage } = useQuery({
+    queryKey: ['admin.index:storage'],
+    staleTime: 30_000,
+    queryFn: () => api.admin.storage.status(),
+  });
   const { data: stats } = useQuery({
     queryKey: ['admin.index:stats'],
     staleTime: 30_000,
@@ -49,6 +95,16 @@ function Overview() {
         <StatCard label="API Key" value={stats?.apiKeys} />
         <StatCard label="API 调用" value={stats?.totalRequests} sub={`今日 ${stats?.requestsToday ?? 0}`} />
       </div>
+
+      <section aria-labelledby="storage-heading" className="space-y-3">
+        <h2 id="storage-heading" className="text-sm font-medium">
+          对象存储
+        </h2>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <BucketCard title="公共桶" desc="封面与头像，匿名可读" status={storage?.public} />
+          <BucketCard title="私有桶" desc="音频与原始文件，仅限时签名访问" status={storage?.private} />
+        </div>
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

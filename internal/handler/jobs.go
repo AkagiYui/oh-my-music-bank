@@ -28,7 +28,7 @@ import (
 
 type Jobs struct {
 	db       *gorm.DB
-	store    *objectstore.Store
+	store    objectstore.Stores
 	bili     *BilibiliHandler
 	maxBytes int64
 	cancel   context.CancelFunc
@@ -57,7 +57,7 @@ func optionalTrackID(raw string) (int64, error) {
 	}
 	return id, nil
 }
-func NewJobs(db *gorm.DB, store *objectstore.Store, bili *BilibiliHandler, maxBytes int64) *Jobs {
+func NewJobs(db *gorm.DB, store objectstore.Stores, bili *BilibiliHandler, maxBytes int64) *Jobs {
 	return &Jobs{db: db, store: store, bili: bili, maxBytes: maxBytes}
 }
 func (j *Jobs) Start() {
@@ -173,7 +173,7 @@ func (j *Jobs) Upload(c *gin.Context) {
 	defer src.Close()
 	key := "staging/" + uuid.NewString() + ext
 	if err = objectgc.Schedule(j.db, objectstore.BucketPrivate, key, 24*time.Hour); err == nil {
-		err = j.store.Put(c.Request.Context(), objectstore.BucketPrivate, key, src, f.Size, "application/octet-stream")
+		err = j.store.Private.Put(c.Request.Context(), key, src, f.Size, "application/octet-stream")
 	}
 	if err != nil {
 		c.JSON(502, pkgerrors.Internal("保存上传文件失败"))
@@ -313,7 +313,7 @@ func (j *Jobs) process(parent context.Context) {
 				name := f.Name()
 				defer os.Remove(name)
 				var src io.ReadCloser
-				src, err = j.store.Get(ctx, objectstore.BucketPrivate, job.InputKey)
+				src, err = j.store.Private.Get(ctx, job.InputKey)
 				if err == nil {
 					var n int64
 					n, err = io.Copy(f, io.LimitReader(src, j.maxBytes+1))

@@ -25,7 +25,7 @@ func Schedule(db *gorm.DB, bucket objectstore.BucketKind, key string, delay time
 }
 
 // Collect 先在短事务内领取任务，再在事务外调用对象存储，避免慢网络请求长期占用数据库锁。
-func Collect(ctx context.Context, db *gorm.DB, store *objectstore.Store) error {
+func Collect(ctx context.Context, db *gorm.DB, store objectstore.Stores) error {
 	leaseUntil := time.Now().Add(5 * time.Minute)
 	var rows []model.ObjectGC
 	if err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

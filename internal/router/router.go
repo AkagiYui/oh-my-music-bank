@@ -22,7 +22,7 @@ type SetupDeps struct {
 	DB     *gorm.DB
 	Config *config.Config
 	Cache  *cache.Manager
-	Store  *objectstore.Store
+	Store  objectstore.Stores
 	Bili   *bilibili.Client
 	Jobs   *handler.Jobs
 }
@@ -33,16 +33,17 @@ func Setup(deps SetupDeps) *gin.Engine {
 	apikeyHandler := handler.NewAPIKeyHandler(deps.DB)
 	userHandler := handler.NewUserHandler(deps.DB)
 	siteHandler := handler.NewSiteHandler(deps.DB, deps.Cache)
-	trackHandler := handler.NewTrackHandler(deps.DB, deps.Store)
-	artistHandler := handler.NewArtistHandler(deps.DB, deps.Store)
-	albumHandler := handler.NewAlbumHandler(deps.DB, deps.Store)
+	trackHandler := handler.NewTrackHandler(deps.DB, deps.Store.Public)
+	artistHandler := handler.NewArtistHandler(deps.DB, deps.Store.Public)
+	albumHandler := handler.NewAlbumHandler(deps.DB, deps.Store.Public)
 	languageHandler := handler.NewLanguageHandler(deps.DB)
 	audioHandler := handler.NewAudioHandler(deps.DB, deps.Store, deps.Config.Upload)
-	publicHandler := handler.NewPublicHandler(deps.DB, deps.Store)
+	publicHandler := handler.NewPublicHandler(deps.DB, deps.Store.Public)
 	statsHandler := handler.NewStatsHandler(deps.DB)
 	logHandler := handler.NewLogHandler(deps.DB)
 	integrationsHandler := handler.NewIntegrationsHandler(deps.Cache)
-	metadataHandler := handler.NewMetadataHandler(deps.DB, deps.Store)
+	metadataHandler := handler.NewMetadataHandler(deps.DB, deps.Store.Public)
+	storageHandler := handler.NewStorageHandler(deps.Store)
 	bilibiliHandler := handler.NewBilibiliHandler(deps.DB, deps.Store, deps.Cache, deps.Bili)
 
 	engine := gin.New()
@@ -135,6 +136,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 			}
 
 			admin.GET("/logs", logHandler.List)
+			admin.GET("/storage", storageHandler.Status)
 			if deps.Jobs != nil {
 				admin.GET("/jobs", deps.Jobs.List)
 				admin.POST("/jobs/upload", deps.Jobs.Upload)

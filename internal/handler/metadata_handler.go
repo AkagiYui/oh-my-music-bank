@@ -21,11 +21,11 @@ import (
 // MetadataHandler 接入网易云元信息搜索，并把匹配结果应用到曲目。
 type MetadataHandler struct {
 	db    *gorm.DB
-	store *objectstore.Store
+	store *objectstore.Public
 }
 
 // NewMetadataHandler 创建元信息处理器。
-func NewMetadataHandler(db *gorm.DB, store *objectstore.Store) *MetadataHandler {
+func NewMetadataHandler(db *gorm.DB, store *objectstore.Public) *MetadataHandler {
 	return &MetadataHandler{db: db, store: store}
 }
 
