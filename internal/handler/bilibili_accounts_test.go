@@ -214,7 +214,8 @@ func TestBilibiliLegacyMigrationAndPinnedJobs(t *testing.T) {
 	user := testUser(t, db, "admin")
 	sql, err := db.DB()
 	must(t, err)
-	must(t, goose.Down(sql, "migrations"))
+	// 回退到 B 站账号迁移之前的版本，而不是只回退最新一个迁移，否则新增迁移后旧 Cookie 升级路径不会重跑。
+	must(t, goose.DownTo(sql, "migrations", 6))
 	cookie := "SESSDATA=legacy; DedeUserID=123; bili_jct=csrf"
 	must(t, db.Create(&model.Setting{Key: "bilibili.cookie", Value: cookie}).Error)
 	job := model.IngestJob{ID: "11111111-1111-4111-8111-111111111111", UserID: user.ID, Kind: "bilibili", Payload: `{"bvid":"BVtest","cid":123}`, Status: "queued", Stage: "等待处理"}
