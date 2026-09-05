@@ -10,15 +10,18 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { BiliCropper } from '../components/BiliCropper';
+import { RecognizeRangePicker } from '../components/RecognizeRangePicker';
+import { computeNeteaseFingerprint, NETEASE_SEGMENT_SEC } from '../lib/netease-afp';
 import { formatDuration } from '../lib/utils';
 import { Field, FieldGroup, FieldLabel } from '../components/ui/field';
 export const Route = createFileRoute('/music/import')({
   component: ImportPage,
 });
-const providerItems = [
-  { value: 'xfyun', label: '讯飞', disabled: false },
-  { value: 'netease', label: '网易云（暂未支持）', disabled: true },
-];
+// 各识别服务对送检片段的限制：讯飞 2MB 上限约合 65 秒，留余量取 58；网易云指纹窗口固定 6 秒。
+const providerSegment: Record<string, { maxLength: number; fixedLength: boolean }> = {
+  xfyun: { maxLength: 58, fixedLength: false },
+  netease: { maxLength: NETEASE_SEGMENT_SEC, fixedLength: true },
+};
 function ImportPage() {
   const { data: status } = useQuery({
     queryKey: ['admin.import:status'],
@@ -117,6 +120,9 @@ function ImportWorkspace({ accountId, configured }: { accountId: string; configu
   const [cid, setCid] = useState(0);
   const [start, setStart] = useState(0);
   const [end, setEnd] = useState(0);
+  // 识别窗口独立于裁剪：null 表示跟随裁剪范围自动居中，用户拖动后才固定。
+  const [recStart, setRecStart] = useState<number | null>(null);
+  const [recLen, setRecLen] = useState<number | null>(null);
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
   const [provider, setProvider] = useState('xfyun');
@@ -128,6 +134,26 @@ function ImportWorkspace({ accountId, configured }: { accountId: string; configu
     value: p.cid,
     label: `P${p.page} ${p.part} (${formatDuration(p.duration)})`,
   }));
+  // 网易云识别依赖管理员拉取的指纹资源，未就绪时不允许选中。
+  const { data: integrations } = useQuery({
+    queryKey: ['admin.integrations:cfg'],
+    queryFn: () => api.admin.integrations.get(),
+  });
+  const afpReady = Boolean(integrations?.neteaseAfp?.ready);
+  const providerItems = [
+    { value: 'xfyun', label: '讯飞', disabled: false },
+    { value: 'netease', label: afpReady ? '网易云' : '网易云（需先拉取指纹资源）', disabled: !afpReady },
+  ];
+  const segment = providerSegment[provider] ?? providerSegment.xfyun;
+  // 识别窗口始终夹在裁剪范围内，裁剪或识别服务变化时自动收敛，无需额外同步。
+  const recWindow = (() => {
+    const span = Math.max(end - start, 0);
+    const length = segment.fixedLength
+      ? Math.min(segment.maxLength, span)
+      : Math.min(recLen ?? segment.maxLength, segment.maxLength, span);
+    const centered = start + (span - length) / 2;
+    return { start: Math.max(start, Math.min(recStart ?? centered, end - length)), length };
+  })();
   const page = () => video?.pages.find((p) => p.cid === cid);
   const duration = () => page()?.duration ?? 0;
   const { data: streamUrl, isFetching: streamUrlLoading } = useQuery({
@@ -169,6 +195,7 @@ function ImportWorkspace({ accountId, configured }: { accountId: string; configu
       setCid(p.cid);
       setStart(0);
       setEnd(p.duration);
+      resetRecognizeWindow();
       setTitle(info.title);
       setArtist(info.owner);
     } catch (e) {
@@ -180,6 +207,7 @@ function ImportWorkspace({ accountId, configured }: { accountId: string; configu
     setCid(c);
     setStart(0);
     setEnd(video?.pages.find((p) => p.cid === c)?.duration ?? 0);
+    resetRecognizeWindow();
   }
   async function ingest(useSegment: boolean) {
     if (!video) return;
@@ -213,18 +241,35 @@ function ImportWorkspace({ accountId, configured }: { accountId: string; configu
       setBusy('');
     }
   }
+  function resetRecognizeWindow() {
+    setRecStart(null);
+    setRecLen(null);
+  }
   async function recognize() {
     if (!video) return;
     setBusy('recognize');
     clearFeedback();
     try {
+      // 网易云的指纹只能在浏览器里算：先取回片段 PCM，再把 rawdata 回传给后端匹配。
+      let rawdata: string | undefined;
+      if (provider === 'netease') {
+        const pcm = await api.admin.bilibili.recognizePcm({
+          accountId,
+          bvid: video!.bvid,
+          cid: cid,
+          startSec: recWindow.start,
+          durationSec: recWindow.length || NETEASE_SEGMENT_SEC,
+        });
+        rawdata = await computeNeteaseFingerprint(new Float32Array(pcm));
+      }
       const r = await api.admin.bilibili.recognize({
         accountId,
         bvid: video!.bvid,
         cid: cid,
-        startSec: start,
-        endSec: end,
+        startSec: recWindow.start,
+        endSec: recWindow.start + recWindow.length,
         provider: provider,
+        rawdata,
       });
       setCands(r);
       if (r.length === 0) setMsg('未识别出结果，可调整片段重试');
@@ -431,6 +476,23 @@ function ImportWorkspace({ accountId, configured }: { accountId: string; configu
                         setEnd(e);
                       }}
                     />
+                    <RecognizeRangePicker
+                      rangeStart={start}
+                      rangeEnd={end}
+                      start={recWindow.start}
+                      length={recWindow.length}
+                      maxLength={segment.maxLength}
+                      fixedLength={segment.fixedLength}
+                      onChange={(s, l) => {
+                        setRecStart(s);
+                        setRecLen(l);
+                      }}
+                    />
+                    {recStart !== null || recLen !== null ? (
+                      <Button size="sm" variant="ghost" className="h-7 self-start" onClick={resetRecognizeWindow}>
+                        识别片段回到居中
+                      </Button>
+                    ) : null}
                   </>
                 ) : (
                   <p className="text-sm">加载试听地址…</p>

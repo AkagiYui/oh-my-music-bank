@@ -12,9 +12,10 @@ import (
 const usage = `用法：ommb <action> [选项]
 
 可用 action：
-  reset-password  按邮箱重置密码，并撤销该账号的全部登录会话
+  reset-password      按邮箱重置密码，并撤销该账号的全部登录会话
+  fetch-netease-afp   下载网易云听歌识曲的指纹资源到指定目录（镜像构建期预置用）
 
-运行 ommb reset-password --help 查看选项。
+运行 ommb <action> --help 查看选项。
 `
 
 func main() {
@@ -33,6 +34,12 @@ func run(args []string, input *os.File, output, errOutput io.Writer) error {
 	case "help", "-h", "--help":
 		fmt.Fprint(output, usage)
 		return nil
+	case "fetch-netease-afp":
+		err := runFetchNeteaseAFP(args[1:], output, errOutput)
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
 	case "reset-password":
 		err := runResetPassword(args[1:], input, output, errOutput)
 		if errors.Is(err, flag.ErrHelp) {

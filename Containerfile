@@ -30,6 +30,17 @@ COPY pkg/ ./pkg/
 RUN CGO_ENABLED=0 go build -o /app/server ./cmd/server
 # 维护工具随镜像分发，忘记密码时无需在容器中安装 Go。
 RUN CGO_ENABLED=0 go build -o /app/ommb ./cmd/cli
+# 可选：把网易云听歌识曲的指纹资源预置进镜像。这两个文件是网易官方 Chrome 扩展的一部分，
+# 打包进对外分发的镜像等于代为分发第三方版权二进制，请自行确认合规后再开启。
+# 设为 0 则镜像不含该文件，管理员仍可在集成配置里按需拉取。
+ARG NETEASE_AFP=1
+ARG NETEASE_AFP_URL=""
+RUN mkdir -p /app/netease-afp && \
+    if [ "$NETEASE_AFP" = "1" ]; then \
+        # 上游更新会导致哈希校验失败，此时只警告不阻断镜像构建，改由管理员运行时处理。
+        /app/ommb fetch-netease-afp --out /app/netease-afp ${NETEASE_AFP_URL:+--url "$NETEASE_AFP_URL"} \
+            || echo "警告：预置网易云指纹资源失败，镜像将不包含该文件"; \
+    fi
 
 # ---- Stage 3a: External DB（外部数据库 + 外部对象存储）----
 FROM alpine:3 AS external-db
@@ -38,6 +49,8 @@ RUN apk add --no-cache caddy ca-certificates tzdata ffmpeg bash
 COPY --from=frontend-builder /app/web/dist /usr/share/caddy
 COPY --from=backend-builder /app/server /usr/local/bin/server
 COPY --from=backend-builder /app/ommb /usr/local/bin/ommb
+# 目录可能为空（未预置指纹资源），运行时会回落到管理员手动拉取。
+COPY --from=backend-builder /app/netease-afp /opt/ommb/netease-afp
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
@@ -52,6 +65,7 @@ RUN apk add --no-cache \
 COPY --from=frontend-builder /app/web/dist /usr/share/caddy
 COPY --from=backend-builder /app/server /usr/local/bin/server
 COPY --from=backend-builder /app/ommb /usr/local/bin/ommb
+COPY --from=backend-builder /app/netease-afp /opt/ommb/netease-afp
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

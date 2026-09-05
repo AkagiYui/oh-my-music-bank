@@ -73,6 +73,42 @@ const job = {
   cancelRequested: false,
 };
 
+// 替身胶水：只复刻网易扩展 sandbox 页对外的 message 协议（reset / record / 48000 样点出指纹），
+// 用来验证前端 Worker 驱动与识别链路，不含也不需要真实指纹算法。
+const AFP_GLUE_STUB = `
+(function () {
+  let buffer = new Float32Array(0);
+  let times = 1;
+  fetch('afp.wasm')
+    .then(function (r) { return r.arrayBuffer(); })
+    .then(function (bytes) { return WebAssembly.instantiate(bytes, {}); });
+  window.addEventListener('message', function (event) {
+    const type = event.data.type;
+    const source = event.source;
+    if (type === 'reset') {
+      buffer = new Float32Array(0);
+      times = 1;
+      source.postMessage({ type: 'resetCallBack', data: '' }, '*');
+      return;
+    }
+    if (type !== 'record') return;
+    const chunk = event.data.data[0];
+    const next = new Float32Array(buffer.length + chunk.length);
+    next.set(buffer);
+    next.set(chunk, buffer.length);
+    buffer = next;
+    let result;
+    if (buffer.length >= 48000 && times === 1) {
+      times = 2;
+      const fp = new Int8Array(8);
+      for (let i = 0; i < fp.length; i++) fp[i] = Math.round(buffer[i * 1000] * 100);
+      result = { result: fp.buffer, times: 2, duration: 6, sessionId: 'stub-session' };
+    }
+    source.postMessage({ type: 'recordCallBack', data: result }, '*');
+  });
+})();
+`;
+
 export async function mockApp(page: Page, loggedIn = true) {
   let settings = { ...defaultSiteSettings };
   const errors: string[] = [];
@@ -121,6 +157,22 @@ export async function mockApp(page: Page, loggedIn = true) {
       /* 上传请求使用 multipart。 */
     }
     requests.push({ path, method, body, params: url.searchParams });
+    // 网易云识别链路走二进制：片段 PCM 与指纹资源都在这里提前返回。
+    if (path.endsWith('/bilibili/recognize/pcm')) {
+      const samples = new Float32Array(48000);
+      for (let i = 0; i < samples.length; i++) samples[i] = Math.sin(i / 20) * 0.5;
+      await route.fulfill({ contentType: 'application/octet-stream', body: Buffer.from(samples.buffer) });
+      return;
+    }
+    if (path.endsWith('/netease-afp/asset/afp.wasm')) {
+      // 最小合法 wasm 模块，够桩胶水实例化一次。
+      await route.fulfill({ contentType: 'application/wasm', body: Buffer.from([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]) });
+      return;
+    }
+    if (path.endsWith('/netease-afp/asset/sandbox.bundle.js')) {
+      await route.fulfill({ contentType: 'text/javascript', body: AFP_GLUE_STUB });
+      return;
+    }
     const paged = (data: unknown[]) => ({
       data,
       total: 101,
@@ -239,7 +291,27 @@ export async function mockApp(page: Page, loggedIn = true) {
       response = { data: { url: `/test-audio-${String(body.cid)}.wav` } };
     else if (path.endsWith('/bilibili/recognize'))
       response = { data: [{ title: '识别曲目', artist: '识别艺术家', source: 'xfyun' }] };
-    else if (path.endsWith('/integrations')) response = { data: { xfyunApiKeySet: true, xfyunAppId: 'test-app' } };
+    else if (path.endsWith('/integrations'))
+      response = {
+        data: {
+          xfyunApiKeySet: true,
+          xfyunAppId: 'test-app',
+          neteaseAfp: {
+            ready: false,
+            source: '',
+            verified: true,
+            verifyHash: true,
+            sourceUrl: '',
+            version: '',
+            wasmSha256: '',
+            glueSha256: '',
+            fetchedAt: '',
+            extensionId: 'ext-id',
+            expectedWasmSha: 'wasm-sha',
+            expectedGlueSha: 'glue-sha',
+          },
+        },
+      };
     else if (path.endsWith('/integrations/test')) response = { data: { message: '连接成功' } };
     else if (path.endsWith('/metadata/search'))
       response = {

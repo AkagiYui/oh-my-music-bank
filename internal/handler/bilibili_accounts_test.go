@@ -363,7 +363,7 @@ func TestBilibiliAccountHandlersRejectNonAdminsAndLegacyWrites(t *testing.T) {
 			}
 		}
 	}
-	resp := call(t, NewIntegrationsHandler(cache.New(db)).Update, "PUT", "/integrations", gin.H{"bilibiliCookie": "SESSDATA=must-not-be-saved"}, nil)
+	resp := call(t, NewIntegrationsHandler(cache.New(db), nil, "").Update, "PUT", "/integrations", gin.H{"bilibiliCookie": "SESSDATA=must-not-be-saved"}, nil)
 	if resp.Code != 400 {
 		t.Fatal("old cookie import endpoint remains writable")
 	}

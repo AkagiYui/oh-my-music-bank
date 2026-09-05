@@ -122,7 +122,7 @@ test('分 P 保留数字 CID 和裁剪重置，识别服务的禁用项不能选
   const provider = page.getByRole('combobox', { name: '识别服务' });
   await expect(provider).toHaveText('讯飞');
   await provider.click();
-  await expect(page.getByRole('option', { name: '网易云（暂未支持）' })).toBeDisabled();
+  await expect(page.getByRole('option', { name: '网易云（需先拉取指纹资源）' })).toBeDisabled();
   await page.screenshot({ path: testInfo.outputPath('provider-select.png'), fullPage: true });
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
@@ -130,9 +130,69 @@ test('分 P 保留数字 CID 和裁剪重置，识别服务的禁用项不能选
   // 禁用项不会确认选择；退出弹层后再操作页面按钮。
   await page.keyboard.press('Escape');
   await expect(page.getByRole('listbox')).toHaveCount(0);
+  // 识别窗口默认在裁剪范围内居中，讯飞取 58 秒上限。
+  await expect(page.getByText('将识别 1:01 – 1:59 · 时长 0:58')).toBeVisible();
   await page.getByRole('button', { name: '识别此片段' }).click();
   await expect
     .poll(() => app.requests.find((request) => request.path.endsWith('/bilibili/recognize'))?.body)
-    .toEqual({ accountId: 'bili-1', bvid: 'BVtest', cid: 2, startSec: 0, endSec: 180, provider: 'xfyun' });
+    .toEqual({ accountId: 'bili-1', bvid: 'BVtest', cid: 2, startSec: 61, endSec: 119, provider: 'xfyun' });
+  app.assertNoErrors();
+});
+
+test('网易云识别在浏览器内生成指纹后再提交匹配', async ({ page }) => {
+  const app = await mockApp(page);
+  // 指纹资源就绪后网易云才可选；覆盖默认的未拉取状态。
+  await page.route('**/api/v1/admin/integrations', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          xfyunApiKeySet: true,
+          xfyunAppId: 'test-app',
+          neteaseAfp: {
+            ready: true,
+            source: 'fetched',
+            verified: true,
+            verifyHash: true,
+            sourceUrl: '',
+            version: '1.0.4',
+            wasmSha256: 'wasm-sha',
+            glueSha256: 'glue-sha',
+            fetchedAt: '2026-09-06T00:00:00Z',
+            extensionId: 'ext-id',
+            expectedWasmSha: 'wasm-sha',
+            expectedGlueSha: 'glue-sha',
+          },
+        },
+      },
+    }),
+  );
+  await page.goto('/music/import');
+  await page.getByPlaceholder('或直接输入 BV 号（如 BV1xx411c7mD）').fill('BVtest');
+  await page.getByRole('button', { name: '打开', exact: true }).click();
+
+  const provider = page.getByRole('combobox', { name: '识别服务' });
+  await provider.click();
+  await page.getByRole('option', { name: '网易云', exact: true }).click();
+  await expect(provider).toHaveText('网易云');
+  // 网易云窗口固定 6 秒，默认落在裁剪范围正中。
+  await expect(page.getByText('将识别 0:57 – 1:03 · 时长 0:06')).toBeVisible();
+
+  await page.getByRole('button', { name: '识别此片段' }).click();
+  await expect
+    .poll(() => app.requests.find((request) => request.path.endsWith('/bilibili/recognize/pcm'))?.body)
+    .toEqual({ accountId: 'bili-1', bvid: 'BVtest', cid: 1, startSec: 57, durationSec: 6 });
+  await expect
+    .poll(() => {
+      const body = app.requests.find((request) => request.path.endsWith('/bilibili/recognize'))?.body;
+      if (!body) return undefined;
+      return {
+        provider: body.provider,
+        startSec: body.startSec,
+        endSec: body.endSec,
+        rawdataLength: typeof body.rawdata === 'string' ? body.rawdata.length : 0,
+      };
+    })
+    .toEqual({ provider: 'netease', startSec: 57, endSec: 63, rawdataLength: 12 });
+  await expect(page.getByText('识别曲目')).toBeVisible();
   app.assertNoErrors();
 });

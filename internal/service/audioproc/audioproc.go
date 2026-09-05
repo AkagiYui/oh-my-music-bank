@@ -69,6 +69,18 @@ func ToPCM16kMono(ctx context.Context, inPath, outPath string, startSec, maxSec 
 	return err
 }
 
+// ToPCMFloat8kMono 输出 8kHz 单声道 32 位浮点裸 PCM，供网易云 afp 指纹使用。
+// 网易扩展用 AudioContext({sampleRate:8000}) 取样，指纹算法只认这个格式；
+// 指纹要求满 maxSec 的样点，素材不足时用 apad 补静音，保证输出长度固定。
+func ToPCMFloat8kMono(ctx context.Context, inPath, outPath string, startSec, maxSec float64) error {
+	if err := ValidateSegment(startSec, startSec+maxSec, 0); err != nil {
+		return err
+	}
+	args := []string{"-y", "-nostdin", "-hide_banner", "-loglevel", "error", "-ss", fmt.Sprintf("%.3f", startSec), "-i", inPath, "-af", "apad", "-t", fmt.Sprintf("%.3f", maxSec), "-ac", "1", "-ar", "8000", "-f", "f32le", "-acodec", "pcm_f32le", outPath}
+	_, _, err := Command(ctx, "ffmpeg", args...)
+	return err
+}
+
 // 限制工具输出内存占用；仍消费全部输出，避免子进程因管道阻塞而挂起。
 type cappedBuffer struct{ bytes.Buffer }
 

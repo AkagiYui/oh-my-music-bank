@@ -71,5 +71,10 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # 预置网易云指纹资源；设仓库变量 BUNDLE_NETEASE_AFP=0 可关闭，
+          # 拉取失败只在构建日志中告警，不会阻断镜像发布。
+          build-args: |
+            NETEASE_AFP=${{ vars.BUNDLE_NETEASE_AFP || '1' }}
+            NETEASE_AFP_URL=${{ vars.NETEASE_AFP_URL }}
           cache-from: type=gha,scope=${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=${{ matrix.variant }}

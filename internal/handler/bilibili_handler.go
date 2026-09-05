@@ -285,23 +285,50 @@ func (h *BilibiliHandler) Recognize(c *gin.Context) {
 		StartSec  float64 `json:"startSec"`
 		EndSec    float64 `json:"endSec"`
 		Provider  string  `json:"provider"`
+		RawData   string  `json:"rawdata"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest(err.Error()))
 		return
 	}
-	a, err := h.accounts.Credentials(c.Request.Context(), req.AccountID)
-	if err != nil {
-		accountError(c, err)
-		return
+	provider := req.Provider
+	if provider == "" {
+		provider = "xfyun"
 	}
-
-	if req.Provider != "" && req.Provider != "xfyun" {
-		c.JSON(501, pkgerrors.BadRequest("该识别服务尚未支持"))
+	if provider != "xfyun" && provider != "netease" {
+		c.JSON(400, pkgerrors.BadRequest("unknown provider"))
 		return
 	}
 	if err := audioproc.ValidateSegment(req.StartSec, req.EndSec, 0); err != nil {
 		c.JSON(400, pkgerrors.BadRequest(err.Error()))
+		return
+	}
+	segLen := req.EndSec - req.StartSec
+	if segLen <= 0 {
+		segLen = 20
+	}
+	if segLen > 58 {
+		segLen = 58
+	}
+
+	// 网易云的指纹由前端用官方 afp.wasm 算好后回传，服务端不必再取一次音频。
+	if provider == "netease" {
+		if req.RawData == "" {
+			c.JSON(400, pkgerrors.BadRequest("缺少音频指纹，请先获取识别片段"))
+			return
+		}
+		cands, err := recognize.NeteaseMatch(c.Request.Context(), req.RawData, int(segLen))
+		if err != nil {
+			c.JSON(http.StatusBadGateway, pkgerrors.New("recognize_error", err.Error()))
+			return
+		}
+		response.Success(c, cands)
+		return
+	}
+
+	a, err := h.accounts.Credentials(c.Request.Context(), req.AccountID)
+	if err != nil {
+		accountError(c, err)
 		return
 	}
 	if h.cache.GetSetting("xfyun.app_id") == "" || h.cache.GetSetting("xfyun.api_key") == "" {
@@ -314,19 +341,6 @@ func (h *BilibiliHandler) Recognize(c *gin.Context) {
 		return
 	}
 	defer os.Remove(srcPath)
-
-	segLen := req.EndSec - req.StartSec
-	if segLen <= 0 {
-		segLen = 20
-	}
-	if segLen > 58 {
-		segLen = 58
-	}
-
-	provider := req.Provider
-	if provider == "" {
-		provider = "xfyun"
-	}
 
 	switch provider {
 	case "xfyun":
@@ -356,11 +370,61 @@ func (h *BilibiliHandler) Recognize(c *gin.Context) {
 			return
 		}
 		response.Success(c, cands)
-	case "netease":
-		// 网易云识别需要 afp 指纹后端，本仓库未内置，返回明确说明。
-		_, err := recognize.NeteaseMatch(c.Request.Context(), "", int(segLen))
-		c.JSON(http.StatusNotImplemented, pkgerrors.New("not_implemented", err.Error()))
 	default:
 		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest("unknown provider"))
 	}
+}
+
+// RecognizePCM 输出识别片段的 8kHz 单声道浮点 PCM，前端据此在浏览器里生成网易云指纹。
+func (h *BilibiliHandler) RecognizePCM(c *gin.Context) {
+	var req struct {
+		AccountID   string  `json:"accountId"`
+		Bvid        string  `json:"bvid" binding:"required"`
+		Cid         int64   `json:"cid" binding:"required"`
+		StartSec    float64 `json:"startSec"`
+		DurationSec float64 `json:"durationSec"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, pkgerrors.BadRequest(err.Error()))
+		return
+	}
+	if req.DurationSec <= 0 {
+		req.DurationSec = recognize.NeteaseSegmentSec
+	}
+	if req.DurationSec > 30 {
+		req.DurationSec = 30
+	}
+	if err := audioproc.ValidateSegment(req.StartSec, req.StartSec+req.DurationSec, 0); err != nil {
+		c.JSON(400, pkgerrors.BadRequest(err.Error()))
+		return
+	}
+	a, err := h.accounts.Credentials(c.Request.Context(), req.AccountID)
+	if err != nil {
+		accountError(c, err)
+		return
+	}
+	srcPath, err := h.downloadToTemp(c.Request.Context(), a, req.Bvid, req.Cid)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, pkgerrors.New("bilibili_error", err.Error()))
+		return
+	}
+	defer os.Remove(srcPath)
+
+	out, err := os.CreateTemp("", "ommb-afp-*.pcm")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("temp"))
+		return
+	}
+	out.Close()
+	defer os.Remove(out.Name())
+	if err := audioproc.ToPCMFloat8kMono(c.Request.Context(), srcPath, out.Name(), req.StartSec, req.DurationSec); err != nil {
+		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("转码失败: "+err.Error()))
+		return
+	}
+	data, err := os.ReadFile(out.Name())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, pkgerrors.Internal("read pcm"))
+		return
+	}
+	c.Data(http.StatusOK, "application/octet-stream", data)
 }

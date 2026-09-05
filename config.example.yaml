@@ -47,3 +47,8 @@ storage:
 
 upload:
   max_size_mb: 200
+
+recognize:
+  # 镜像内预置的网易云指纹资源目录（afp.wasm 与 sandbox.bundle.js）。
+  # 管理员在集成配置里拉取的副本优先，此目录仅作回落；对应 OMMB_RECOGNIZE_NETEASE_AFP_DIR。
+  netease_afp_dir: "/opt/ommb/netease-afp"

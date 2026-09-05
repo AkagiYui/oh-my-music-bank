@@ -28,6 +28,7 @@ const (
 	defaultAccessTokenTTL      = "15m"
 	defaultRefreshTokenTTL     = "168h"
 	defaultUploadMaxSizeMB     = 200
+	defaultNeteaseAFPDir       = "/opt/ommb/netease-afp"
 )
 
 // Server HTTP 服务配置，支持 TCP 与 Unix Socket 两种监听方式。
@@ -87,6 +88,12 @@ type Upload struct {
 	MaxSizeMB int `mapstructure:"max_size_mb"`
 }
 
+// Recognize 听歌识曲相关的本地资源位置。
+type Recognize struct {
+	// NeteaseAFPDir 镜像内预置的网易云指纹资源目录；管理员另行拉取的副本优先。
+	NeteaseAFPDir string `mapstructure:"netease_afp_dir"`
+}
+
 // Config 应用总配置。
 type Config struct {
 	Server   Server   `mapstructure:"server"`
@@ -94,6 +101,8 @@ type Config struct {
 	Auth     Auth     `mapstructure:"auth"`
 	Storage  Storage  `mapstructure:"storage"`
 	Upload   Upload   `mapstructure:"upload"`
+
+	Recognize Recognize `mapstructure:"recognize"`
 }
 
 // AccessTokenDuration 解析访问令牌有效期。
@@ -155,6 +164,7 @@ var envBindings = map[string][]string{
 	"storage.private.bucket":            {"OMMB_STORAGE_PRIVATE_BUCKET", "S3_PRIVATE_BUCKET"},
 	"storage.private.region":            {"OMMB_STORAGE_PRIVATE_REGION", "S3_PRIVATE_REGION"},
 	"storage.private.presigned_url_ttl": {"OMMB_STORAGE_PRIVATE_PRESIGNED_URL_TTL", "S3_PRIVATE_PRESIGNED_URL_TTL"},
+	"recognize.netease_afp_dir":         {"OMMB_RECOGNIZE_NETEASE_AFP_DIR"},
 	"upload.max_size_mb":                {"OMMB_UPLOAD_MAX_SIZE_MB"},
 }
 
@@ -297,6 +307,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.refresh_token_ttl", defaultRefreshTokenTTL)
 	v.SetDefault("upload.max_size_mb", defaultUploadMaxSizeMB)
 	v.SetDefault("storage.private.presigned_url_ttl", "30m")
+	v.SetDefault("recognize.netease_afp_dir", defaultNeteaseAFPDir)
 }
 
 // parseDuration 解析时间字符串，额外支持 "d"（天）单位。

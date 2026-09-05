@@ -41,7 +41,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 	publicHandler := handler.NewPublicHandler(deps.DB, deps.Store.Public)
 	statsHandler := handler.NewStatsHandler(deps.DB)
 	logHandler := handler.NewLogHandler(deps.DB)
-	integrationsHandler := handler.NewIntegrationsHandler(deps.Cache)
+	integrationsHandler := handler.NewIntegrationsHandler(deps.Cache, deps.Store.Private, deps.Config.Recognize.NeteaseAFPDir)
 	metadataHandler := handler.NewMetadataHandler(deps.DB, deps.Store.Public)
 	storageHandler := handler.NewStorageHandler(deps.Store)
 	bilibiliHandler := handler.NewBilibiliHandler(deps.DB, deps.Store, deps.Cache, deps.Bili)
@@ -224,6 +224,9 @@ func Setup(deps SetupDeps) *gin.Engine {
 				integrations.GET("", integrationsHandler.Get)
 				integrations.PUT("", integrationsHandler.Update)
 				integrations.POST("/test", integrationsHandler.Test)
+				integrations.POST("/netease-afp/fetch", integrationsHandler.FetchNeteaseAFP)
+				integrations.DELETE("/netease-afp", integrationsHandler.DeleteNeteaseAFP)
+				integrations.GET("/netease-afp/asset/:name", integrationsHandler.NeteaseAFPAsset)
 			}
 
 			meta := admin.Group("/metadata")
@@ -247,6 +250,7 @@ func Setup(deps SetupDeps) *gin.Engine {
 				bili.GET("/resolve", bilibiliHandler.Resolve)
 				bili.POST("/ingest", bilibiliHandler.Ingest)
 				bili.POST("/recognize", bilibiliHandler.Recognize)
+				bili.POST("/recognize/pcm", bilibiliHandler.RecognizePCM)
 			}
 		}
 	}

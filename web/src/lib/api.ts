@@ -71,7 +71,8 @@ async function tryRefresh(): Promise<boolean> {
   return refreshing;
 }
 
-async function request(path: string, init: RequestInit = {}, auth = false): Promise<any> {
+/** 发起带鉴权的请求，401 时刷新令牌重试一次；JSON 与二进制响应共用这段逻辑。 */
+async function authFetch(path: string, init: RequestInit, auth: boolean): Promise<Response> {
   const headers = new Headers(init.headers);
   const originalAccess = auth ? getAccessToken() : null;
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
@@ -91,12 +92,31 @@ async function request(path: string, init: RequestInit = {}, auth = false): Prom
     clearTokens();
     window.dispatchEvent(new Event('ommb:session-expired'));
   }
+  return res;
+}
+
+async function request(path: string, init: RequestInit = {}, auth = false): Promise<any> {
+  const res = await authFetch(path, init, auth);
   try {
     return await parseResponse(res);
   } catch (err) {
     notifyError(err);
     throw err;
   }
+}
+
+/** 取二进制响应（PCM 片段、wasm 资源）；失败时后端仍返回 JSON 错误体。 */
+async function binaryRequest(path: string, init: RequestInit = {}, auth = true): Promise<ArrayBuffer> {
+  const res = await authFetch(path, init, auth);
+  if (!res.ok) {
+    try {
+      await parseResponse(res);
+    } catch (err) {
+      notifyError(err);
+      throw err;
+    }
+  }
+  return res.arrayBuffer();
 }
 
 async function openRequest(origin: string, apiKey: string, path: string, init: RequestInit = {}): Promise<any> {
@@ -374,9 +394,26 @@ export interface BiliLogin {
   account?: BiliAccount;
 }
 
+export interface NeteaseAfpStatus {
+  ready: boolean;
+  /** fetched=管理员拉取的副本，bundled=镜像内预置，空=尚未就绪。 */
+  source: string;
+  verified: boolean;
+  verifyHash: boolean;
+  sourceUrl: string;
+  version: string;
+  wasmSha256: string;
+  glueSha256: string;
+  fetchedAt: string;
+  extensionId: string;
+  expectedWasmSha: string;
+  expectedGlueSha: string;
+}
+
 export interface IntegrationsConfig {
   xfyunAppId: string;
   xfyunApiKeySet: boolean;
+  neteaseAfp: NeteaseAfpStatus;
 }
 
 // ===== 接口集合 =====
@@ -560,8 +597,24 @@ export const api = {
           (r) => r.data,
         ),
       get: (): Promise<IntegrationsConfig> => request('/api/v1/admin/integrations', {}, true).then((r) => r.data),
-      update: (b: { xfyunAppId?: string; xfyunApiKey?: string }) =>
-        request('/api/v1/admin/integrations', { method: 'PUT', body: JSON.stringify(b) }, true),
+      update: (b: {
+        xfyunAppId?: string;
+        xfyunApiKey?: string;
+        neteaseAfpVerifyHash?: boolean;
+        neteaseAfpSourceUrl?: string;
+      }) => request('/api/v1/admin/integrations', { method: 'PUT', body: JSON.stringify(b) }, true),
+      // 网易云指纹资源不入库、不打包，由后端按需从 Chrome 应用店拉取官方扩展并校验哈希。
+      neteaseAfpFetch: (): Promise<{
+        version: string;
+        wasmSha256: string;
+        glueSha256: string;
+        wasmSize: number;
+        glueSize: number;
+        verified: boolean;
+      }> => request('/api/v1/admin/integrations/netease-afp/fetch', { method: 'POST' }, true).then((r) => r.data),
+      neteaseAfpRemove: () => request('/api/v1/admin/integrations/netease-afp', { method: 'DELETE' }, true),
+      neteaseAfpAsset: (name: string): Promise<ArrayBuffer> =>
+        binaryRequest(`/api/v1/admin/integrations/netease-afp/asset/${encodeURIComponent(name)}`),
     },
     metadata: {
       search: (q: string): Promise<MetaSong[]> =>
@@ -630,10 +683,20 @@ export const api = {
         startSec?: number;
         endSec?: number;
         provider: string;
+        rawdata?: string;
       }): Promise<RecognizeCandidate[]> =>
         request('/api/v1/admin/bilibili/recognize', { method: 'POST', body: JSON.stringify(b) }, true).then(
           (r) => r.data,
         ),
+      // 网易云识别的指纹在浏览器里算，先取回片段的 8kHz 单声道浮点 PCM。
+      recognizePcm: (b: {
+        accountId?: string;
+        bvid: string;
+        cid: number;
+        startSec: number;
+        durationSec: number;
+      }): Promise<ArrayBuffer> =>
+        binaryRequest('/api/v1/admin/bilibili/recognize/pcm', { method: 'POST', body: JSON.stringify(b) }),
     },
   },
 
